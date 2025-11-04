@@ -4,32 +4,39 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Color = "RED" | "BLUE" | "GREEN";
-type KeyCode = "F" | "J" | "K";
+type WordType = Color | "NONSENSE";
+type KeyCode = "F" | "J" | "K" | "D";
 
 type Trial = {
   id: number;
-  word: Color;
+  word: Color | string; // 色名または無意味語
+  wordType: WordType;
   ink: Color;
   congruent: boolean;
 };
 
 type Result = {
   trialId: number;
-  word: Color;
+  word: Color | string;
+  wordType: WordType;
   ink: Color;
   congruent: boolean;
   key: KeyCode;
-  chosenColor: Color;
+  chosenAnswer: Color | "OTHER";
   correct: boolean;
   rt: number;
 };
 
 const COLORS: Color[] = ["RED", "BLUE", "GREEN"];
 
-const KEY_TO_COLOR: Record<KeyCode, Color> = {
+// 3-5文字の無意味語リスト（red, blue, green と同様の文字数）
+const NONSENSE_WORDS = ["cat", "dog", "book", "desk", "chair", "lamp", "box", "pen", "cup", "hat"];
+
+const KEY_TO_ANSWER: Record<KeyCode, Color | "OTHER"> = {
   F: "RED",
   J: "GREEN",
   K: "BLUE",
+  D: "OTHER",
 };
 
 const COLOR_TO_HEX: Record<Color, string> = {
@@ -39,9 +46,9 @@ const COLOR_TO_HEX: Record<Color, string> = {
 };
 
 const COLOR_LABELS: Record<Color, string> = {
-  RED: "赤",
-  BLUE: "青",
-  GREEN: "緑",
+  RED: "red",
+  BLUE: "blue",
+  GREEN: "green",
 };
 
 type ScreenState = "intro" | "running" | "done";
@@ -63,21 +70,44 @@ function randomColor(exclude?: Color): Color {
   return filtered[index];
 }
 
+function randomNonsenseWord(): string {
+  const index = Math.floor(Math.random() * NONSENSE_WORDS.length);
+  return NONSENSE_WORDS[index];
+}
+
 function generateTrials(): Trial[] {
   const congruentFlags = shuffle(
     Array.from({ length: TOTAL_TRIALS }, (_, idx) => idx < TOTAL_TRIALS / 2)
   );
 
   return congruentFlags.map((congruent, index) => {
-    const word = randomColor();
-    const ink = congruent ? word : randomColor(word);
+    // 70%の確率で色単語、30%の確率で無意味語
+    const useColorWord = Math.random() < 0.7;
 
-    return {
-      id: index + 1,
-      word,
-      ink,
-      congruent,
-    };
+    if (useColorWord) {
+      const word = randomColor();
+      const ink = congruent ? word : randomColor(word);
+
+      return {
+        id: index + 1,
+        word,
+        wordType: word as WordType,
+        ink,
+        congruent,
+      };
+    } else {
+      // 無意味語の場合は常にランダムな色のインク
+      const word = randomNonsenseWord();
+      const ink = randomColor();
+
+      return {
+        id: index + 1,
+        word,
+        wordType: "NONSENSE" as WordType,
+        ink,
+        congruent: false, // 無意味語は常に不一致
+      };
+    }
   });
 }
 
@@ -120,7 +150,7 @@ export default function StroopTaskPage() {
       }
 
       const key = event.key.toUpperCase() as KeyCode;
-      if (!["F", "J", "K"].includes(key)) {
+      if (!["F", "J", "K", "D"].includes(key)) {
         return;
       }
 
@@ -128,9 +158,16 @@ export default function StroopTaskPage() {
         return;
       }
 
-      const chosenColor = KEY_TO_COLOR[key];
+      const chosenAnswer = KEY_TO_ANSWER[key];
       const rt = performance.now() - (trialStartRef.current ?? performance.now());
-      const correct = chosenColor === currentTrial.ink;
+
+      // 正答判定: 色単語なら色が一致、無意味語ならOTHERが選択されている
+      let correct = false;
+      if (currentTrial.wordType === "NONSENSE") {
+        correct = chosenAnswer === "OTHER";
+      } else {
+        correct = chosenAnswer === currentTrial.ink;
+      }
 
       respondedRef.current = true;
 
@@ -139,10 +176,11 @@ export default function StroopTaskPage() {
         {
           trialId: currentTrial.id,
           word: currentTrial.word,
+          wordType: currentTrial.wordType,
           ink: currentTrial.ink,
           congruent: currentTrial.congruent,
           key,
-          chosenColor,
+          chosenAnswer,
           correct,
           rt,
         },
@@ -221,23 +259,27 @@ export default function StroopTaskPage() {
           <div className="space-y-4">
             <h1 className="text-3xl font-semibold">課題を開始する前に</h1>
             <p className="text-base leading-relaxed">
-              10試行のストループ課題を実施します。単語の意味ではなくフォントの色に対して、
-              対応するキーをできるだけ早く押してください。
+              10試行のストループ課題を実施します。色単語（red, green, blue）が表示された場合はフォントの色に対応するキーを、
+              無意味語が表示された場合は「その他」キーをできるだけ早く押してください。
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3 text-sm">
+          <div className="grid gap-3 sm:grid-cols-4 text-sm">
+            <div className="rounded-lg border border-zinc-200 p-4">
+              <p className="font-mono text-lg">D</p>
+              <p className="font-semibold text-gray-400">その他</p>
+            </div>
             <div className="rounded-lg border border-zinc-200 p-4">
               <p className="font-mono text-lg">F</p>
-              <p className="text-[#e53935] font-semibold">赤</p>
+              <p className="font-semibold text-gray-400">red</p>
             </div>
             <div className="rounded-lg border border-zinc-200 p-4">
               <p className="font-mono text-lg">J</p>
-              <p className="text-[#43a047] font-semibold">緑</p>
+              <p className="font-semibold text-gray-400">green</p>
             </div>
             <div className="rounded-lg border border-zinc-200 p-4">
               <p className="font-mono text-lg">K</p>
-              <p className="text-[#1e88e5] font-semibold">青</p>
+              <p className="font-semibold text-gray-400">blue</p>
             </div>
           </div>
 
@@ -265,29 +307,35 @@ export default function StroopTaskPage() {
               className="text-6xl font-bold tracking-widest"
               style={{ color: COLOR_TO_HEX[currentTrial.ink] }}
             >
-              {COLOR_LABELS[currentTrial.word]}
+              {currentTrial.wordType === "NONSENSE"
+                ? currentTrial.word
+                : COLOR_LABELS[currentTrial.word as Color]
+              }
             </p>
             {feedback && feedback.trialId === currentTrial.id && (
               <p
-                className={`text-lg font-semibold ${
-                  feedback.correct ? "text-[#43a047]" : "text-[#e53935]"
-                }`}
+                className={`text-lg font-semibold ${feedback.correct ? "text-[#43a047]" : "text-[#e53935]"
+                  }`}
               >
                 {feedback.correct ? "正解" : "不正解"}
               </p>
             )}
-            <div className="text-sm grid gap-2 sm:grid-cols-3">
+            <div className="text-sm grid gap-2 sm:grid-cols-4">
+              <div className="rounded border border-zinc-200 px-4 py-2">
+                <p className="font-mono text-lg">D</p>
+                <p className="font-semibold text-gray-400">その他</p>
+              </div>
               <div className="rounded border border-zinc-200 px-4 py-2">
                 <p className="font-mono text-lg">F</p>
-                <p className="text-[#e53935] font-semibold">赤</p>
+                <p className="font-semibold text-gray-400">red</p>
               </div>
               <div className="rounded border border-zinc-200 px-4 py-2">
                 <p className="font-mono text-lg">J</p>
-                <p className="text-[#43a047] font-semibold">緑</p>
+                <p className="font-semibold text-gray-400">green</p>
               </div>
               <div className="rounded border border-zinc-200 px-4 py-2">
                 <p className="font-mono text-lg">K</p>
-                <p className="text-[#1e88e5] font-semibold">青</p>
+                <p className="font-semibold text-gray-400">blue</p>
               </div>
             </div>
             <p className="text-xs text-zinc-500">ESCで離脱できます</p>
@@ -313,7 +361,7 @@ export default function StroopTaskPage() {
                   <th className="px-3 py-2 text-left">インク色</th>
                   <th className="px-3 py-2 text-left">一致</th>
                   <th className="px-3 py-2 text-left">キー</th>
-                  <th className="px-3 py-2 text-left">選択色</th>
+                  <th className="px-3 py-2 text-left">選択回答</th>
                   <th className="px-3 py-2 text-left">判定</th>
                   <th className="px-3 py-2 text-left">反応時間 (ms)</th>
                 </tr>
@@ -322,11 +370,21 @@ export default function StroopTaskPage() {
                 {results.map((result) => (
                   <tr key={result.trialId} className="odd:bg-white even:bg-zinc-50">
                     <td className="px-3 py-2">{result.trialId}</td>
-                    <td className="px-3 py-2">{COLOR_LABELS[result.word]}</td>
+                    <td className="px-3 py-2">
+                      {result.wordType === "NONSENSE"
+                        ? result.word
+                        : COLOR_LABELS[result.word as Color]
+                      }
+                    </td>
                     <td className="px-3 py-2">{COLOR_LABELS[result.ink]}</td>
                     <td className="px-3 py-2">{result.congruent ? "一致" : "不一致"}</td>
                     <td className="px-3 py-2">{result.key}</td>
-                    <td className="px-3 py-2">{COLOR_LABELS[result.chosenColor]}</td>
+                    <td className="px-3 py-2">
+                      {result.chosenAnswer === "OTHER"
+                        ? "その他"
+                        : COLOR_LABELS[result.chosenAnswer as Color]
+                      }
+                    </td>
                     <td className="px-3 py-2">{result.correct ? "正解" : "不正解"}</td>
                     <td className="px-3 py-2">{Math.round(result.rt)}</td>
                   </tr>

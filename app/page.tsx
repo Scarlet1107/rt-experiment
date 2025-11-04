@@ -5,10 +5,10 @@ export default function Home() {
     <main className="min-h-screen bg-white text-gray-900 flex flex-col items-center justify-center px-6 py-12">
       <section className="max-w-2xl w-full space-y-8 text-center">
         <div className="space-y-4">
-          <h1 className="text-4xl font-semibold">3色ストループ課題 PoC</h1>
+          <h1 className="text-4xl font-semibold">拡張ストループ課題 PoC</h1>
           <p className="text-base leading-relaxed">
-            これから赤・青・緑のストループ課題（10試行）を行います。表示される単語の
-            色を、キーボードで素早く回答してください。結果画面では各試行の履歴と平均値が表示されます。
+            これからストループ課題（10試行）を行います。色単語（red, green, blue）が表示された場合はフォントの色を、
+            無意味語が表示された場合は「その他」を、キーボードで素早く回答してください。結果画面では各試行の履歴と平均値が表示されます。
           </p>
         </div>
 
@@ -16,18 +16,22 @@ export default function Home() {
           <p className="font-medium text-sm uppercase text-zinc-500 tracking-wide">
             キー割り当て
           </p>
-          <ul className="grid gap-2 sm:grid-cols-3 text-sm">
+          <ul className="grid gap-2 sm:grid-cols-4 text-sm">
+            <li className="flex flex-col items-center gap-1">
+              <span className="font-mono text-lg">D</span>
+              <span className="font-semibold text-gray-400">その他</span>
+            </li>
             <li className="flex flex-col items-center gap-1">
               <span className="font-mono text-lg">F</span>
-              <span className="text-[#e53935] font-semibold">赤</span>
+              <span className="font-semibold text-gray-400">red</span>
             </li>
             <li className="flex flex-col items-center gap-1">
               <span className="font-mono text-lg">J</span>
-              <span className="text-[#43a047] font-semibold">緑</span>
+              <span className="font-semibold text-gray-400">green</span>
             </li>
             <li className="flex flex-col items-center gap-1">
               <span className="font-mono text-lg">K</span>
-              <span className="text-[#1e88e5] font-semibold">青</span>
+              <span className="font-semibold text-gray-400">blue</span>
             </li>
           </ul>
           <p className="text-sm text-zinc-600">
