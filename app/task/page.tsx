@@ -291,7 +291,7 @@ export default function StroopTaskPage() {
             <button
               type="button"
               onClick={handleStart}
-              className="inline-flex items-center justify-center rounded-full bg-[#1e88e5] px-8 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-[#1565c0] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1e88e5]"
+              className="inline-flex items-center justify-center rounded-full bg-[#1e88e5] px-8 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-[#1565c0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1e88e5]"
             >
               課題を開始
             </button>
@@ -397,14 +397,14 @@ export default function StroopTaskPage() {
             <button
               type="button"
               onClick={handleStart}
-              className="inline-flex items-center justify-center rounded-full bg-[#1e88e5] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1565c0] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1e88e5]"
+              className="inline-flex items-center justify-center rounded-full bg-[#1e88e5] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1565c0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1e88e5]"
             >
               もう一度実施
             </button>
             <button
               type="button"
               onClick={() => router.push("/")}
-              className="inline-flex items-center justify-center rounded-full border border-zinc-300 px-6 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400"
+              className="inline-flex items-center justify-center rounded-full border border-zinc-300 px-6 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400"
             >
               説明に戻る
             </button>

@@ -1,0 +1,136 @@
+import { Language } from '../lib/i18n';
+
+// 基本的な色の型定義
+export type Color = 'RED' | 'BLUE' | 'GREEN';
+export type KeyCode = 'F' | 'J' | 'K' | 'D';
+export type WordType = Color | 'NONSENSE';
+export type AnswerType = Color | 'OTHER';
+
+// Stroop刺激の定義
+export interface StroopStimulus {
+    word: string;                    // 表示する単語（常に英語）
+    inkColor: Color;                 // 文字色
+    correctAnswer: AnswerType;       // 正解
+    isCongruent: boolean;            // 一致試行かどうか
+    category: 'COLOR_WORD' | 'NONSENSE'; // 刺激タイプ
+}
+
+// 個別試行の結果
+export interface Trial {
+    id: number;                      // 試行ID（ブロック内）
+    blockId: string;                 // 所属ブロックID
+    stimulus: StroopStimulus;        // 提示された刺激
+    responseKey: KeyCode | null;     // 押されたキー
+    chosenAnswer: AnswerType | null; // 選択された回答
+    isCorrect: boolean | null;       // 正誤
+    reactionTime: number | null;     // 反応時間（ms）
+    timestamp: Date;                 // 試行実施時刻
+}
+
+// ブロックの結果
+export interface BlockResult {
+    id: string;                      // ブロックID
+    blockNumber: number;             // ブロック番号（1-8）
+    experimentId: string;            // 所属実験ID
+    trials: Trial[];                 // ブロック内の全試行
+    accuracy: number;                // 正答率（0-100）
+    averageRT: number;               // 平均反応時間（正解試行のみ、ms）
+    completedAt: Date;               // ブロック完了時刻
+    feedbackShown?: string;          // 表示されたフィードバック内容
+}
+
+// 実験全体の結果
+export interface Experiment {
+    id: string;                      // 実験ID
+    participantId: string;           // 参加者ID（UUID）
+    conditionType: 'static' | 'personalized'; // 実験条件
+    sessionNumber: 1 | 2;            // セッション番号
+    language: Language;              // 使用言語
+    startedAt: Date;                 // 実験開始時刻
+    completedAt?: Date;              // 実験完了時刻
+    blocks: BlockResult[];           // 全ブロックの結果
+    overallAccuracy?: number;        // 全体正答率
+    overallAverageRT?: number;       // 全体平均反応時間
+}
+
+// 参加者情報
+export interface Participant {
+    id: string;                      // 参加者ID（UUID）
+    nickname: string;                // 呼び名
+    preferredPraise: string;         // 好きな褒め方
+    avoidExpressions: string[];      // 避けてほしい表現
+    language: Language;              // 使用言語
+    createdAt: Date;                 // 登録日時
+    experiments: Experiment[];       // 実施した実験
+}
+
+// フィードバックパターン
+export interface FeedbackPattern {
+    rtImproved: string[];            // RT向上時
+    rtDeclined: string[];            // RT低下時
+    accuracyHigh: string[];          // 正答率高い時
+    accuracyLow: string[];           // 正答率低い時
+    perfectScore: string[];          // 全問正解時
+    consistent: string[];            // 安定している時
+    encouragement: string[];         // 一般的な励まし
+}
+
+// 実験設定
+export interface ExperimentConfig {
+    totalBlocks: number;             // 総ブロック数
+    trialsPerBlock: number;          // ブロック当たりの試行数
+    stimulusDisplayTime?: number;    // 刺激表示時間（ms、制限なしの場合null）
+    interTrialInterval: number;      // 試行間間隔（ms）
+    feedbackDuration: number;        // フィードバック表示時間（ms）
+}
+
+// データベース用の型（Supabaseテーブル構造）
+export interface ParticipantRow {
+    id: string;
+    nickname: string;
+    preferred_praise: string;
+    avoid_expressions: string[];
+    language: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ExperimentRow {
+    id: string;
+    participant_id: string;
+    condition_type: string;
+    session_number: number;
+    started_at: string;
+    completed_at?: string;
+    total_trials: number;
+    overall_accuracy?: number;
+    overall_avg_rt?: number;
+    created_at: string;
+}
+
+export interface BlockRow {
+    id: string;
+    experiment_id: string;
+    block_number: number;
+    trial_count: number;
+    accuracy: number;
+    average_rt: number;
+    feedback_shown?: string;
+    completed_at: string;
+    created_at: string;
+}
+
+export interface TrialRow {
+    id: string;
+    block_id: string;
+    trial_number: number;
+    word: string;
+    word_type: string;
+    ink_color: string;
+    is_congruent: boolean;
+    response_key?: string;
+    chosen_answer?: string;
+    is_correct?: boolean;
+    reaction_time?: number;
+    timestamp: string;
+}

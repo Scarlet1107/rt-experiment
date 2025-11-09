@@ -284,9 +284,8 @@ async function generatePersonalizedFeedback(
     .replace('{avoidExpressions}', participantInfo.avoidExpressions.join(', '));
     
   const response = await openai.chat.completions.create({
-    model: "gpt-4",
+    model: "gpt-5-nano",
     messages: [{ role: "user", content: prompt }],
-    temperature: 0.7,
   });
   
   return JSON.parse(response.choices[0].message.content);
