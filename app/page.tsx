@@ -4,10 +4,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { FlaskConical, Settings, Code2 } from "lucide-react";
+import { experimentConfig } from "@/lib/config/experiment";
 
 export default function Home() {
   // テスト用UUID
   const testUUID = "test-uuid-123e4567-e89b-12d3-a456-426614174000";
+  const { totalTrials } = experimentConfig;
 
   return (
     <main className="min-h-screen bg-background">
@@ -40,7 +42,7 @@ export default function Home() {
                     '同意書',
                     '事前ヒアリング',
                     '注意事項・練習',
-                    '本番実験（480試行）'
+                    `本番実験（${totalTrials}試行）`
                   ].map((step, index) => (
                     <div key={index} className="flex items-center space-x-3">
                       <Badge variant="outline" className="w-6 h-6 p-0 flex items-center justify-center">
@@ -54,7 +56,7 @@ export default function Home() {
                 <Separator />
 
                 <Button asChild className="w-full">
-                  <Link href={`/language/${testUUID}`}>
+                  <Link href={`/language/${testUUID}?condition=static`}>
                     <FlaskConical className="mr-2 h-4 w-4" />
                     実験フローテスト
                   </Link>

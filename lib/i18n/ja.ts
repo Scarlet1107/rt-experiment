@@ -14,12 +14,11 @@ export const ja = {
 あなたの参加は完全に任意であり、いつでも中断・撤回することができます。
 
 収集されたデータは：
-• 完全に匿名化されます
 • 学術研究のみに使用されます
-• 個人を特定することはできません
+• 個人を特定できる形でデータを公開することはありません
 • AI（OpenAI API）を使用してフィードバックを生成しますが、データは学習に使用されません
 
-実験時間：約15分（練習含む）
+実験時間：約20分（練習含む）
 実験内容：画面に表示される文字の色を判断するタスクを行います`,
         agree: "同意して参加する",
         disagree: "参加しない"
@@ -30,10 +29,16 @@ export const ja = {
         subtitle: "パーソナライズされたフィードバックのために、いくつか質問にお答えください",
         nickname: "呼び名（ニックネーム）",
         nicknamePlaceholder: "例：さくらさん、Alex、etc.",
+        nicknameHelper: "実験中のフィードバックで使用される名前です",
         preferredPraise: "好きな褒められ方・励まし方",
+        preferredPraiseHint: "当てはまるものを複数選んでください",
         preferredPraisePlaceholder: "例：頑張ってるね！、すごいじゃない！",
-        avoidExpressions: "避けてほしい表現（カンマ区切り）",
-        avoidExpressionsPlaceholder: "例：だめ、遅い、下手",
+        toneQuestionTitle: "実験中、どんな話し方で励まされるとやる気が出そうですか？",
+        toneQuestionDescription: "一番近いものを1つ選んでください",
+        motivationQuestionTitle: "うまくいかないとき、どんな励まし方が嬉しいですか？",
+        motivationQuestionDescription: "ピンとくる選択肢を1つ選んでください",
+        evaluationQuestionTitle: "どんな評価がモチベーションになりますか？",
+        evaluationQuestionDescription: "直感で当てはまるものを選んでください",
         continue: "次へ進む"
     },
 
@@ -70,8 +75,7 @@ export const ja = {
         incorrect: "不正解",
         break: "休憩",
         breakMessage: "お疲れ様でした。少し休憩しましょう。準備ができたら次のブロックに進んでください。",
-        continue: "次のブロックへ",
-        escToExit: "ESCキーで実験を中断できます"
+        continue: "次のブロックへ"
     },
 
     feedback: {

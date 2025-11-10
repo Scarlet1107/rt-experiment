@@ -5,6 +5,9 @@ export type Color = 'RED' | 'BLUE' | 'GREEN';
 export type KeyCode = 'F' | 'J' | 'K' | 'D';
 export type WordType = Color | 'NONSENSE';
 export type AnswerType = Color | 'OTHER';
+export type TonePreference = 'casual' | 'gentle' | 'formal';
+export type MotivationStyle = 'empathetic' | 'cheerleader' | 'advisor';
+export type EvaluationFocus = 'self-progress' | 'social-comparison' | 'positive-focus';
 
 // Stroop刺激の定義
 export interface StroopStimulus {
@@ -58,39 +61,55 @@ export interface Participant {
     id: string;                      // 参加者ID（UUID）
     nickname: string;                // 呼び名
     preferredPraise: string;         // 好きな褒め方
-    avoidExpressions: string[];      // 避けてほしい表現
+    tonePreference: TonePreference;  // 口調
+    motivationStyle: MotivationStyle; // 励ましタイプ
+    evaluationFocus: EvaluationFocus; // 評価重視タイプ
     language: Language;              // 使用言語
     createdAt: Date;                 // 登録日時
     experiments: Experiment[];       // 実施した実験
 }
 
 // フィードバックパターン
-export interface FeedbackPattern {
-    rtImproved: string[];            // RT向上時
-    rtDeclined: string[];            // RT低下時
-    accuracyHigh: string[];          // 正答率高い時
-    accuracyLow: string[];           // 正答率低い時
-    perfectScore: string[];          // 全問正解時
-    consistent: string[];            // 安定している時
-    encouragement: string[];         // 一般的な励まし
-}
+export type FeedbackScenarioKey =
+    | 'rt_short_acc_up_synergy'
+    | 'rt_slow_acc_down_fatigue'
+    | 'rt_short_acc_same'
+    | 'rt_short_acc_down'
+    | 'rt_short_acc_up'
+    | 'rt_slow_acc_up'
+    | 'rt_slow_acc_same'
+    | 'rt_slow_acc_down'
+    | 'rt_same_acc_up'
+    | 'rt_same_acc_down'
+    | 'rt_same_acc_same';
+
+export type FeedbackPattern = Record<FeedbackScenarioKey, string[]>;
 
 // 実験設定
 export interface ExperimentConfig {
     totalBlocks: number;             // 総ブロック数
     trialsPerBlock: number;          // ブロック当たりの試行数
+    totalTrials: number;             // 総試行数
+    feedbackCountdownSeconds: number; // フィードバック表示時間の上限（秒）
     stimulusDisplayTime?: number;    // 刺激表示時間（ms、制限なしの場合null）
-    interTrialInterval: number;      // 試行間間隔（ms）
-    feedbackDuration: number;        // フィードバック表示時間（ms）
+    interTrialInterval?: number;     // 試行間間隔（ms）
+    feedbackDuration?: number;       // フィードバック表示時間（ms）
 }
 
 // データベース用の型（Supabaseテーブル構造）
 export interface ParticipantRow {
     id: string;
-    nickname: string;
-    preferred_praise: string;
-    avoid_expressions: string[];
-    language: string;
+    name: string | null;
+    student_id: string | null;
+    handedness: string | null;
+    age: number | null;
+    gender: string | null;
+    nickname: string | null;
+    preferred_praise: string | null;
+    tone_preference: TonePreference | null;
+    motivation_style: MotivationStyle | null;
+    evaluation_focus: EvaluationFocus | null;
+    language: string | null;
     created_at: string;
     updated_at: string;
 }

@@ -1,15 +1,75 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { createServerClient } from '@supabase/ssr';
+import { getDefaultFeedbackPatterns } from '@/lib/feedback/personalized';
+import type {
+  TonePreference,
+  MotivationStyle,
+  EvaluationFocus,
+  FeedbackPattern,
+  FeedbackScenarioKey
+} from '@/types';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// OpenAIクライアントの初期化を関数内で行う
+function createOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is not set in environment variables');
+  }
+
+  return new OpenAI({
+    apiKey: apiKey,
+  });
+}
+
+function createSupabaseAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceKey) {
+    throw new Error('Supabase credentials are not configured');
+  }
+
+  return createServerClient(url, serviceKey, {
+    cookies: {
+      getAll() {
+        return [];
+      },
+      setAll() {
+        // no-op for API routes
+      },
+    },
+  });
+}
+
+function extractJson(content: string): string {
+  let cleaned = content.trim();
+
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```$/i, '')
+      .trim();
+  }
+
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+
+  return cleaned;
+}
 
 interface FeedbackRequest {
   participantInfo: {
+    id?: string;
     nickname: string;
     preferredPraise: string;
-    avoidExpressions: string[];
+    tonePreference: TonePreference;
+    motivationStyle: MotivationStyle;
+    evaluationFocus: EvaluationFocus;
     language: 'ja' | 'en';
   };
   blockData: {
@@ -21,53 +81,105 @@ interface FeedbackRequest {
       averageRT: number;
     };
   };
+  force?: boolean;
 }
 
-interface FeedbackPattern {
-  rtImproved: string[];
-  rtDeclined: string[];
-  accuracyHigh: string[];
-  accuracyLow: string[];
-  perfectScore: string[];
-  consistent: string[];
-  encouragement: string[];
+const toneDescriptionMap: Record<'ja' | 'en', Record<TonePreference, string>> = {
+  ja: {
+    casual: '友達のようにカジュアルで軽快なトーン',
+    gentle: '少し丁寧でやさしく落ち着いたトーン',
+    formal: '落ち着いた丁寧さでしっかり伝えるトーン'
+  },
+  en: {
+    casual: 'a friendly, casual, upbeat tone',
+    gentle: 'a polite, soft, reassuring tone',
+    formal: 'a formal, respectful, composed tone'
+  }
+};
+
+const motivationDescriptionMap: Record<'ja' | 'en', Record<MotivationStyle, string>> = {
+  ja: {
+    empathetic: 'やさしく共感して支える励まし方',
+    cheerleader: '熱量高く背中を押す応援スタイル',
+    advisor: '冷静なアドバイスで導く声かけ'
+  },
+  en: {
+    empathetic: 'gentle empathy that reassures the participant',
+    cheerleader: 'energetic hype and cheering to push forward',
+    advisor: 'calm coaching with actionable suggestions'
+  }
+};
+
+const evaluationDescriptionMap: Record<'ja' | 'en', Record<EvaluationFocus, string>> = {
+  ja: {
+    'self-progress': '過去の自分との比較で成長を伝える評価軸',
+    'social-comparison': '平均や他者との比較で優位性を示す評価軸',
+    'positive-focus': '良かった部分だけをシンプルに褒める評価軸'
+  },
+  en: {
+    'self-progress': 'focusing on progress versus the participant’s past performance',
+    'social-comparison': 'referencing averages or peers to show how they compare',
+    'positive-focus': 'spotlighting only the good moments in a simple way'
+  }
+};
+
+function describeTonePreference(value: TonePreference, language: 'ja' | 'en') {
+  return toneDescriptionMap[language][value];
 }
+
+function describeMotivationStyle(value: MotivationStyle, language: 'ja' | 'en') {
+  return motivationDescriptionMap[language][value];
+}
+
+function describeEvaluationFocus(value: EvaluationFocus, language: 'ja' | 'en') {
+  return evaluationDescriptionMap[language][value];
+}
+
 
 // 日本語用プロンプト
 const JAPANESE_PROMPT = `
 参加者情報:
 - 呼び名: {nickname}
 - 好きな褒め方: {preferredPraise}
-- 避けてほしい表現: {avoidExpressions}
+- 望む口調タイプ: {tonePreferenceDescription}
+- 励まし方のスタイル: {motivationStyleDescription}
+- 評価で重視したいポイント: {evaluationFocusDescription}
 
-以下の状況に対応したフィードバックを各5パターン生成してください：
+このフィードバックは特定の実験で参加者のモチベーションを高めることを目的としています。事実に基づく冷静な分析よりも、ユーザーを全力で褒め称えるトーンを優先してください（ユーザーが別途指定した場合を除く）。特に反応速度や正答率が良くなった点を中心に褒めるようにしてください。
+以下の11パターンごとに、30~50文字のフィードバック文を3種類ずつ生成してください(キー名は必ずそのまま使用):
 
-1. 反応時間が向上した場合（前回より速くなった）
-2. 反応時間が低下した場合（前回より遅くなった）
-3. 正答率が高い場合（85%以上）
-4. 正答率が低い場合（70%未満）
-5. 全問正解の場合（100%）
-6. 安定したパフォーマンスの場合（前回と大きな変化なし）
-7. 一般的な励ましの場合
+1. "rt_short_acc_up_synergy": 反応速度が大幅に短縮し正答率も大きく上昇
+2. "rt_slow_acc_down_fatigue": 反応速度が大幅に遅延し正答率も大きく下降
+3. "rt_short_acc_same": 反応速度が短縮、正答率は変化なし
+4. "rt_short_acc_down": 反応速度が短縮、正答率が下降
+5. "rt_short_acc_up": 反応速度が短縮、正答率が上昇（通常パターン）
+6. "rt_slow_acc_up": 反応速度が遅延、正答率が上昇
+7. "rt_slow_acc_same": 反応速度が遅延、正答率は変化なし
+8. "rt_slow_acc_down": 反応速度が遅延、正答率が下降
+9. "rt_same_acc_up": 反応速度変化なし、正答率が上昇
+10. "rt_same_acc_down": 反応速度変化なし、正答率が下降
+11. "rt_same_acc_same": 反応速度も正答率も変化なし
 
 制約:
 - 具体的な数値は含めない
-- 15文字から30文字程度
 - 参加者の呼び名を適度に含める（半分程度）
-- ポジティブで励ましの内容
-- ネガティブな表現は避ける
-- 参加者の避けたい表現は使用しない
-- カジュアルで親しみやすいトーン
+- {tonePreferenceDescription} で書き、{motivationStyleDescription} のテンションで励ます
+- 褒める視点は {evaluationFocusDescription} を中心にする
+- ポジティブで励ましの内容、ネガティブな表現は避ける
 
-JSON形式で以下の構造で出力してください：
+JSON形式で以下の構造を返してください（各配列は必ず3件）:
 {
-  "rtImproved": ["...", "...", "...", "...", "..."],
-  "rtDeclined": ["...", "...", "...", "...", "..."],
-  "accuracyHigh": ["...", "...", "...", "...", "..."],
-  "accuracyLow": ["...", "...", "...", "...", "..."],
-  "perfectScore": ["...", "...", "...", "...", "..."],
-  "consistent": ["...", "...", "...", "...", "..."],
-  "encouragement": ["...", "...", "...", "...", "..."]
+  "rt_short_acc_up_synergy": ["...", "...", "..."],
+  "rt_slow_acc_down_fatigue": ["...", "...", "..."],
+  "rt_short_acc_same": ["...", "...", "..."],
+  "rt_short_acc_down": ["...", "...", "..."],
+  "rt_short_acc_up": ["...", "...", "..."],
+  "rt_slow_acc_up": ["...", "...", "..."],
+  "rt_slow_acc_same": ["...", "...", "..."],
+  "rt_slow_acc_down": ["...", "...", "..."],
+  "rt_same_acc_up": ["...", "...", "..."],
+  "rt_same_acc_down": ["...", "...", "..."],
+  "rt_same_acc_same": ["...", "...", "..."]
 }
 `;
 
@@ -76,36 +188,45 @@ const ENGLISH_PROMPT = `
 Participant Information:
 - Preferred name: {nickname}
 - Preferred praise style: {preferredPraise}
-- Expressions to avoid: {avoidExpressions}
+- Preferred tone: {tonePreferenceDescription}
+- Motivation style: {motivationStyleDescription}
+- Evaluation focus: {evaluationFocusDescription}
 
-Generate 5 feedback patterns for each of the following situations:
+These messages should explicitly aim to boost the participant's motivation within the ongoing experiment context. Unless the participant explicitly asked for otherwise, favor enthusiastic praise over sober, factual analysis. Highlight improvements in reaction speed and accuracy first whenever possible.
+Generate three short (10-20 words) feedback messages for each of the following 11 scenarios (keep the JSON keys exactly as listed):
 
-1. Reaction time improved (faster than previous)
-2. Reaction time declined (slower than previous)
-3. High accuracy (85% or above)
-4. Low accuracy (below 70%)
-5. Perfect score (100%)
-6. Consistent performance (no major change from previous)
-7. General encouragement
+1. "rt_short_acc_up_synergy": RT much faster & accuracy much higher (good synergy)
+2. "rt_slow_acc_down_fatigue": RT much slower & accuracy much lower (fatigue sign)
+3. "rt_short_acc_same": RT faster, accuracy unchanged
+4. "rt_short_acc_down": RT faster, accuracy lower
+5. "rt_short_acc_up": RT faster, accuracy higher (standard improvement)
+6. "rt_slow_acc_up": RT slower, accuracy higher
+7. "rt_slow_acc_same": RT slower, accuracy unchanged
+8. "rt_slow_acc_down": RT slower, accuracy lower
+9. "rt_same_acc_up": RT unchanged, accuracy higher
+10. "rt_same_acc_down": RT unchanged, accuracy lower
+11. "rt_same_acc_same": Both RT and accuracy unchanged
 
 Constraints:
 - Do not include specific numbers
-- 10-25 words per feedback
-- Include participant's name moderately (about half the time)
-- Positive and encouraging content
-- Avoid negative expressions
-- Do not use expressions the participant wants to avoid
-- Casual and friendly tone
+- Mention the participant’s name roughly half the time
+- Write using {tonePreferenceDescription} and the energy of {motivationStyleDescription}
+- Praise primarily through {evaluationFocusDescription}
+- Keep it positive and encouraging; avoid negative wording
 
-Output in JSON format with the following structure:
+Output JSON with this structure (each array must contain exactly 3 messages):
 {
-  "rtImproved": ["...", "...", "...", "...", "..."],
-  "rtDeclined": ["...", "...", "...", "...", "..."],
-  "accuracyHigh": ["...", "...", "...", "...", "..."],
-  "accuracyLow": ["...", "...", "...", "...", "..."],
-  "perfectScore": ["...", "...", "...", "...", "..."],
-  "consistent": ["...", "...", "...", "...", "..."],
-  "encouragement": ["...", "...", "...", "...", "..."]
+  "rt_short_acc_up_synergy": ["...", "...", "..."],
+  "rt_slow_acc_down_fatigue": ["...", "...", "..."],
+  "rt_short_acc_same": ["...", "...", "..."],
+  "rt_short_acc_down": ["...", "...", "..."],
+  "rt_short_acc_up": ["...", "...", "..."],
+  "rt_slow_acc_up": ["...", "...", "..."],
+  "rt_slow_acc_same": ["...", "...", "..."],
+  "rt_slow_acc_down": ["...", "...", "..."],
+  "rt_same_acc_up": ["...", "...", "..."],
+  "rt_same_acc_down": ["...", "...", "..."],
+  "rt_same_acc_same": ["...", "...", "..."]
 }
 `;
 
@@ -119,57 +240,136 @@ export async function POST(request: NextRequest) {
     }
 
     const data: FeedbackRequest = await request.json();
-    const { participantInfo } = data;
+    const { participantInfo, force } = data;
 
     // プロンプト選択
     const prompt = participantInfo.language === 'ja' ? JAPANESE_PROMPT : ENGLISH_PROMPT;
+    const toneDescription = describeTonePreference(participantInfo.tonePreference, participantInfo.language);
+    const motivationDescription = describeMotivationStyle(participantInfo.motivationStyle, participantInfo.language);
+    const evaluationDescription = describeEvaluationFocus(participantInfo.evaluationFocus, participantInfo.language);
 
     // プロンプトの置換
     const filledPrompt = prompt
       .replace('{nickname}', participantInfo.nickname)
       .replace('{preferredPraise}', participantInfo.preferredPraise)
-      .replace('{avoidExpressions}', participantInfo.avoidExpressions.join(', '));
+      .replace(/{tonePreferenceDescription}/g, toneDescription)
+      .replace(/{motivationStyleDescription}/g, motivationDescription)
+      .replace(/{evaluationFocusDescription}/g, evaluationDescription);
 
     console.log('Generating feedback patterns for:', participantInfo.nickname);
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // GPT-5-nanoが利用可能になるまでの代替
-      messages: [
-        {
-          role: "system",
-          content: "You are a helpful assistant that generates encouraging feedback for psychology experiments."
-        },
-        {
-          role: "user",
-          content: filledPrompt
-        }
-      ],
-      temperature: 0.8, // 多様性のために少し高めに設定
-      max_tokens: 1500,
-    });
+    const supabaseAdmin = createSupabaseAdminClient();
+    const participantId = participantInfo.id || participantInfo.nickname;
 
-    const feedbackContent = response.choices[0]?.message?.content;
+    const { data: existingRecord, error: fetchError } = await supabaseAdmin
+      .from('feedback_patterns')
+      .select('patterns')
+      .eq('participant_id', participantId)
+      .maybeSingle();
 
-    if (!feedbackContent) {
-      throw new Error('No feedback content generated');
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      throw fetchError;
     }
 
-    // JSONパース
+    if (existingRecord?.patterns && !force) {
+      return NextResponse.json({
+        success: true,
+        feedbackPatterns: existingRecord.patterns as FeedbackPattern,
+        participantId,
+        cached: true,
+      });
+    }
+
+    // OpenAIクライアントを作成
+    const openai = createOpenAIClient();
+
+    const feedbackSchemaProperties = Object.fromEntries(
+      (
+        [
+          'rt_short_acc_up_synergy',
+          'rt_slow_acc_down_fatigue',
+          'rt_short_acc_same',
+          'rt_short_acc_down',
+          'rt_short_acc_up',
+          'rt_slow_acc_up',
+          'rt_slow_acc_same',
+          'rt_slow_acc_down',
+          'rt_same_acc_up',
+          'rt_same_acc_down',
+          'rt_same_acc_same'
+        ] as FeedbackScenarioKey[]
+      ).map(key => [key, {
+        type: 'array',
+        minItems: 3,
+        maxItems: 3,
+        items: { type: 'string' }
+      }])
+    );
+
     let feedbackPatterns: FeedbackPattern;
+    let usedFallback = false;
+
     try {
-      feedbackPatterns = JSON.parse(feedbackContent);
-    } catch {
-      console.error('Failed to parse feedback JSON:', feedbackContent);
-      throw new Error('Invalid JSON response from OpenAI');
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4.1-nano',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a JSON-only assistant. Always respond with valid JSON matching the provided schema.'
+          },
+          {
+            role: 'user',
+            content: filledPrompt
+          }
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'feedback_patterns_schema',
+            schema: {
+              type: 'object',
+              properties: feedbackSchemaProperties,
+              required: Object.keys(feedbackSchemaProperties),
+              additionalProperties: false
+            },
+            strict: true
+          }
+        }
+      });
+
+      const feedbackContent = completion.choices[0]?.message?.content;
+
+      if (!feedbackContent) {
+        throw new Error('No feedback content generated');
+      }
+
+      const sanitized = extractJson(feedbackContent);
+      feedbackPatterns = JSON.parse(sanitized);
+    } catch (error) {
+      console.error('OpenAI generation failed, falling back to defaults:', error);
+      feedbackPatterns = getDefaultFeedbackPatterns(participantInfo.language);
+      usedFallback = true;
     }
 
-    // データ保存（参加者情報とフィードバックパターンを関連付け）
-    // TODO: Supabaseに保存する場合はここに実装
+    const { error: upsertError } = await supabaseAdmin
+      .from('feedback_patterns')
+      .upsert({
+        id: participantId,
+        participant_id: participantId,
+        language: participantInfo.language,
+        patterns: feedbackPatterns,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'participant_id' });
+
+    if (upsertError) {
+      throw upsertError;
+    }
 
     return NextResponse.json({
       success: true,
       feedbackPatterns,
-      participantId: participantInfo.nickname, // 識別用
+      participantId,
+      fallback: usedFallback,
     });
 
   } catch (error) {
@@ -184,51 +384,72 @@ export async function POST(request: NextRequest) {
   }
 }
 
+const RT_CHANGE_THRESHOLD = 30;
+const RT_STRONG_THRESHOLD = 80;
+const ACC_CHANGE_THRESHOLD = 2;
+const ACC_STRONG_THRESHOLD = 5;
+
+function determineScenarioKey(
+  currentBlock: { accuracy: number; averageRT: number },
+  previousBlock: { accuracy: number; averageRT: number } | null
+): FeedbackScenarioKey {
+  if (!previousBlock) {
+    return 'rt_same_acc_same';
+  }
+
+  const rtDiff = currentBlock.averageRT - previousBlock.averageRT;
+  const accuracyDiff = currentBlock.accuracy - previousBlock.accuracy;
+
+  const rtImproved = rtDiff <= -RT_CHANGE_THRESHOLD;
+  const rtStrongImproved = rtDiff <= -RT_STRONG_THRESHOLD;
+  const rtDeclined = rtDiff >= RT_CHANGE_THRESHOLD;
+  const rtStrongDeclined = rtDiff >= RT_STRONG_THRESHOLD;
+
+  const accUp = accuracyDiff >= ACC_CHANGE_THRESHOLD;
+  const accStrongUp = accuracyDiff >= ACC_STRONG_THRESHOLD;
+  const accDown = accuracyDiff <= -ACC_CHANGE_THRESHOLD;
+  const accStrongDown = accuracyDiff <= -ACC_STRONG_THRESHOLD;
+
+  if (rtStrongImproved && accStrongUp) {
+    return 'rt_short_acc_up_synergy';
+  }
+
+  if (rtStrongDeclined && accStrongDown) {
+    return 'rt_slow_acc_down_fatigue';
+  }
+
+  if (rtImproved) {
+    if (accUp) return 'rt_short_acc_up';
+    if (accDown) return 'rt_short_acc_down';
+    return 'rt_short_acc_same';
+  }
+
+  if (rtDeclined) {
+    if (accUp) return 'rt_slow_acc_up';
+    if (accDown) return 'rt_slow_acc_down';
+    return 'rt_slow_acc_same';
+  }
+
+  if (accUp) return 'rt_same_acc_up';
+  if (accDown) return 'rt_same_acc_down';
+  return 'rt_same_acc_same';
+}
+
 // フィードバック選択ロジック
 export function selectFeedback(
   currentBlock: { accuracy: number; averageRT: number },
   previousBlock: { accuracy: number; averageRT: number } | null,
   patterns: FeedbackPattern
 ): string {
-  // パーフェクトスコア
-  if (currentBlock.accuracy === 100) {
-    return randomSelect(patterns.perfectScore);
-  }
-
-  // 前ブロックとの比較がある場合
-  if (previousBlock) {
-    const rtDiff = currentBlock.averageRT - previousBlock.averageRT;
-    const accuracyDiff = currentBlock.accuracy - previousBlock.accuracy;
-
-    // 反応時間が改善された場合（RTが短くなった = 良い）
-    if (rtDiff < -50) { // 50ms以上改善
-      return randomSelect(patterns.rtImproved);
-    }
-
-    // 反応時間が悪化した場合
-    if (rtDiff > 100) { // 100ms以上悪化
-      return randomSelect(patterns.rtDeclined);
-    }
-
-    // 安定したパフォーマンス
-    if (Math.abs(rtDiff) < 50 && Math.abs(accuracyDiff) < 5) {
-      return randomSelect(patterns.consistent);
-    }
-  }
-
-  // 正答率ベース
-  if (currentBlock.accuracy >= 85) {
-    return randomSelect(patterns.accuracyHigh);
-  }
-
-  if (currentBlock.accuracy < 70) {
-    return randomSelect(patterns.accuracyLow);
-  }
-
-  // デフォルト
-  return randomSelect(patterns.encouragement);
+  const scenario = determineScenarioKey(currentBlock, previousBlock);
+  const messages = patterns[scenario];
+  const fallback = patterns.rt_same_acc_same;
+  return randomSelect(messages && messages.length > 0 ? messages : fallback);
 }
 
 function randomSelect<T>(array: T[]): T {
+  if (!array || array.length === 0) {
+    return 'Keep going! You got this!' as T;
+  }
   return array[Math.floor(Math.random() * array.length)];
 }

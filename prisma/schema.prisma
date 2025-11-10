@@ -1,0 +1,135 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider  = "postgresql"
+    url       = env("DATABASE_URL")
+    directUrl = env("DIRECT_URL")
+}
+
+enum LanguageType {
+    JA @map("ja")
+    EN @map("en")
+}
+
+enum ConditionType {
+    STATIC       @map("static")
+    PERSONALIZED @map("personalized")
+}
+
+enum TonePreferenceType {
+    CASUAL @map("casual")
+    GENTLE @map("gentle")
+    FORMAL @map("formal")
+}
+
+enum MotivationStyleType {
+    EMPATHETIC  @map("empathetic")
+    CHEERLEADER @map("cheerleader")
+    ADVISOR     @map("advisor")
+}
+
+enum EvaluationFocusType {
+    SELF_PROGRESS     @map("self-progress")
+    SOCIAL_COMPARISON @map("social-comparison")
+    POSITIVE_FOCUS    @map("positive-focus")
+}
+
+enum HandednessType {
+    RIGHT @map("right")
+    LEFT  @map("left")
+    OTHER @map("other")
+}
+
+enum GenderType {
+    MALE   @map("male")
+    FEMALE @map("female")
+    OTHER  @map("other")
+}
+
+model Participant {
+    id              String               @id @default(uuid())
+    name            String?
+    studentId       String?              @map("student_id")
+    handedness      HandednessType?
+    age             Int?
+    gender          GenderType?
+    nickname        String?
+    preferredPraise String?              @map("preferred_praise")
+    tonePreference  TonePreferenceType?  @map("tone_preference")
+    motivationStyle MotivationStyleType? @map("motivation_style")
+    evaluationFocus EvaluationFocusType? @map("evaluation_focus")
+    language        LanguageType         @default(JA)
+    createdAt       DateTime             @default(now()) @map("created_at")
+    updatedAt       DateTime?            @default(now()) @updatedAt @map("updated_at")
+    experiments     Experiment[]
+
+    @@map("participants")
+}
+
+model Experiment {
+    id              String        @id @default(uuid())
+    participant     Participant   @relation(fields: [participantId], references: [id], onDelete: Cascade)
+    participantId   String        @map("participant_id")
+    conditionType   ConditionType @map("condition_type")
+    sessionNumber   Int           @default(1) @map("session_number")
+    startedAt       DateTime      @map("started_at")
+    completedAt     DateTime?     @map("completed_at")
+    totalTrials     Int           @default(0) @map("total_trials")
+    overallAccuracy Float?        @map("overall_accuracy")
+    overallAvgRt    Float?        @map("overall_avg_rt")
+    createdAt       DateTime      @default(now()) @map("created_at")
+    blocks          Block[]
+
+    @@index([participantId])
+    @@map("experiments")
+}
+
+model Block {
+    id            String     @id @default(uuid())
+    experiment    Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+    experimentId  String     @map("experiment_id")
+    blockNumber   Int        @map("block_number")
+    trialCount    Int        @default(0) @map("trial_count")
+    accuracy      Float?     @map("accuracy")
+    averageRt     Float?     @map("average_rt")
+    feedbackShown String?    @map("feedback_shown")
+    completedAt   DateTime?  @map("completed_at")
+    createdAt     DateTime   @default(now()) @map("created_at")
+    trials        Trial[]
+
+    @@index([experimentId])
+    @@map("blocks")
+}
+
+model Trial {
+    id           String   @id @default(uuid())
+    block        Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+    blockId      String   @map("block_id")
+    trialNumber  Int      @map("trial_number")
+    word         String
+    wordType     String   @map("word_type")
+    inkColor     String   @map("ink_color")
+    isCongruent  Boolean  @map("is_congruent")
+    responseKey  String?  @map("response_key")
+    chosenAnswer String?  @map("chosen_answer")
+    isCorrect    Boolean? @map("is_correct")
+    reactionTime Int?     @map("reaction_time")
+    timestamp    DateTime
+
+    @@index([blockId])
+    @@map("trials")
+}
+
+model FeedbackPatternRecord {
+    id            String       @id @default(uuid())
+    participantId String       @map("participant_id")
+    language      LanguageType @default(JA)
+    patterns      Json
+    createdAt     DateTime     @default(now()) @map("created_at")
+    updatedAt     DateTime     @updatedAt @map("updated_at")
+
+    @@unique([participantId])
+    @@map("feedback_patterns")
+}

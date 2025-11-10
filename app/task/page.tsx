@@ -140,11 +140,6 @@ export default function StroopTaskPage() {
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        router.push("/");
-        return;
-      }
-
       if (event.repeat) {
         return;
       }
@@ -284,7 +279,7 @@ export default function StroopTaskPage() {
           </div>
 
           <p className="text-sm text-zinc-600">
-            スタート後はESCキーで離脱できます。キーを押しっぱなしにしても反応は1回だけ記録されます。
+            キーを押しっぱなしにしても反応は1回だけ記録されます。
           </p>
 
           <div className="flex justify-center">
@@ -338,7 +333,7 @@ export default function StroopTaskPage() {
                 <p className="font-semibold text-gray-400">blue</p>
               </div>
             </div>
-            <p className="text-xs text-zinc-500">ESCで離脱できます</p>
+            <p className="text-xs text-zinc-500">各キー入力は1回のみ判定されます</p>
           </div>
         </section>
       )}

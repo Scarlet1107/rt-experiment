@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { LanguageProvider, useLanguage, Language } from '../../../lib/i18n';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,8 @@ interface LanguageSelectorContentProps {
 function LanguageSelectorContent({ uuid }: LanguageSelectorContentProps) {
     const { language, setLanguage, t } = useLanguage();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const condition = (searchParams.get('condition') as 'static' | 'personalized') || 'static';
     const [isLoading, setIsLoading] = useState(false);
 
     const handleLanguageSelect = async (selectedLanguage: Language) => {
@@ -23,7 +25,7 @@ function LanguageSelectorContent({ uuid }: LanguageSelectorContentProps) {
 
         // 少し待ってから同意書ページに遷移
         setTimeout(() => {
-            router.push(`/consent/${uuid}`);
+            router.push(`/consent/${uuid}?condition=${condition}`);
         }, 300);
     };
 
@@ -48,11 +50,11 @@ function LanguageSelectorContent({ uuid }: LanguageSelectorContentProps) {
                     <CardContent className="space-y-6">
                         <div className="grid gap-4 sm:grid-cols-2">
                             <Button
-                                variant={language === 'ja' ? 'default' : 'outline'}
+                                variant="outline"
                                 size="lg"
                                 onClick={() => handleLanguageSelect('ja')}
                                 disabled={isLoading}
-                                className="h-auto p-6 flex-col space-y-2"
+                                className="h-auto p-6 flex-col space-y-3 border-muted bg-card hover:border-primary hover:bg-primary/5 transition-all"
                             >
                                 <div className="text-3xl">🇯🇵</div>
                                 <div className="text-lg font-semibold">
@@ -61,11 +63,11 @@ function LanguageSelectorContent({ uuid }: LanguageSelectorContentProps) {
                             </Button>
 
                             <Button
-                                variant={language === 'en' ? 'default' : 'outline'}
+                                variant="outline"
                                 size="lg"
                                 onClick={() => handleLanguageSelect('en')}
                                 disabled={isLoading}
-                                className="h-auto p-6 flex-col space-y-2"
+                                className="h-auto p-6 flex-col space-y-3 border-muted bg-card hover:border-primary hover:bg-primary/5 transition-all"
                             >
                                 <div className="text-3xl">🇺🇸</div>
                                 <div className="text-lg font-semibold">
@@ -77,13 +79,15 @@ function LanguageSelectorContent({ uuid }: LanguageSelectorContentProps) {
                         {isLoading && (
                             <div className="flex items-center justify-center space-x-2 text-muted-foreground">
                                 <ArrowRight className="h-4 w-4 animate-pulse" />
-                                <span className="text-sm">進んでいます...</span>
+                                <span className="text-sm">
+                                    {language === 'ja' ? '進んでいます...' : 'Loading...'}
+                                </span>
                             </div>
                         )}
 
                         <div className="text-center pt-4">
                             <Badge variant="secondary" className="text-xs">
-                                参加者ID: {uuid.slice(0, 8)}...
+                                {language === 'ja' ? '参加者ID' : 'Participant ID'}: {uuid.slice(0, 8)}...
                             </Badge>
                         </div>
                     </CardContent>

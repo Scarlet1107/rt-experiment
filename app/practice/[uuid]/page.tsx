@@ -1,10 +1,18 @@
 'use client';
 
-import { useState, useEffect, useRef, use, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, use, useMemo, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { LanguageProvider, useLanguage } from '../../../lib/i18n';
 import { generateBlockStimuli } from '../../../lib/experiment/stimuli';
 import { StroopStimulus, KeyCode, AnswerType } from '../../../types';
+import { experimentConfig } from '@/lib/config/experiment';
+import { Badge } from '@/components/ui/badge';
+
+const PRACTICE_COLOR_HEX = {
+    RED: '#e53935',
+    BLUE: '#1e88e5',
+    GREEN: '#43a047',
+} as const;
 
 interface PracticeResult {
     stimulus: StroopStimulus;
@@ -21,8 +29,11 @@ interface PracticeContentProps {
 }
 
 function PracticeContent({ uuid }: PracticeContentProps) {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const condition = (searchParams.get('condition') as 'static' | 'personalized') || 'static';
+    const { totalBlocks, trialsPerBlock, totalTrials } = experimentConfig;
 
     const [state, setState] = useState<PracticeState>('intro');
     const [stimuli, setStimuli] = useState<StroopStimulus[]>([]);
@@ -41,11 +52,31 @@ function PracticeContent({ uuid }: PracticeContentProps) {
         D: 'OTHER',
     }), []);
 
-    const COLOR_TO_HEX = {
-        RED: '#e53935',
-        BLUE: '#1e88e5',
-        GREEN: '#43a047',
-    };
+    const KEY_GUIDE = useMemo(() => [
+        { key: 'D', label: language === 'ja' ? 'その他' : 'Other', color: '#4b5563' },
+        { key: 'F', label: language === 'ja' ? '赤色' : 'Red', color: PRACTICE_COLOR_HEX.RED },
+        { key: 'J', label: language === 'ja' ? '緑色' : 'Green', color: PRACTICE_COLOR_HEX.GREEN },
+        { key: 'K', label: language === 'ja' ? '青色' : 'Blue', color: PRACTICE_COLOR_HEX.BLUE },
+    ], [language]);
+
+    const renderColoredKeyGuide = () => (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+            {KEY_GUIDE.map(({ key, label, color }) => (
+                <div key={key} className="space-y-2">
+                    <Badge
+                        variant="outline"
+                        className="text-lg sm:text-xl font-semibold p-3 h-16 w-full flex items-center justify-center border-2 bg-white"
+                        style={{ borderColor: color, color }}
+                    >
+                        {key}
+                    </Badge>
+                    <p className="text-sm font-medium" style={{ color }}>
+                        {label}
+                    </p>
+                </div>
+            ))}
+        </div>
+    );
 
     const currentStimulus = stimuli[currentIndex] || null;
 
@@ -68,7 +99,7 @@ function PracticeContent({ uuid }: PracticeContentProps) {
 
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
-                router.push(`/instructions/${uuid}`);
+                router.push(`/instructions/${uuid}?condition=${condition}`);
                 return;
             }
 
@@ -116,7 +147,7 @@ function PracticeContent({ uuid }: PracticeContentProps) {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [state, currentStimulus, currentIndex, stimuli.length, router, uuid, KEY_TO_ANSWER]);
+    }, [condition, state, currentStimulus, currentIndex, stimuli.length, router, uuid, KEY_TO_ANSWER]);
 
     useEffect(() => {
         return () => {
@@ -126,11 +157,11 @@ function PracticeContent({ uuid }: PracticeContentProps) {
         };
     }, []);
 
-    const handleStartPractice = () => {
+    const handleStartPractice = useCallback(() => {
         setState('running');
         setCurrentIndex(0);
         setResults([]);
-    };
+    }, []);
 
     const handleContinuePractice = () => {
         setCurrentIndex(0);
@@ -139,11 +170,24 @@ function PracticeContent({ uuid }: PracticeContentProps) {
     };
 
     const handleStartMainExperiment = () => {
-        // デフォルトではstatic条件、URLパラメータで条件を指定可能
-        const urlParams = new URLSearchParams(window.location.search);
-        const condition = urlParams.get('condition') || 'static';
         router.push(`/experiment/${uuid}?condition=${condition}`);
     };
+
+    useEffect(() => {
+        if (state !== 'intro') return;
+
+        const handleIntroHotkey = (event: KeyboardEvent) => {
+            if (event.repeat) return;
+            const key = event.key.toUpperCase();
+            if (['D', 'F', 'J', 'K'].includes(key)) {
+                event.preventDefault();
+                handleStartPractice();
+            }
+        };
+
+        window.addEventListener('keydown', handleIntroHotkey);
+        return () => window.removeEventListener('keydown', handleIntroHotkey);
+    }, [state, handleStartPractice]);
 
     if (state === 'intro') {
         return (
@@ -158,35 +202,18 @@ function PracticeContent({ uuid }: PracticeContentProps) {
                         </p>
                     </div>
 
-                    <div className="bg-blue-50 rounded-lg p-6">
-                        <h2 className="text-xl font-semibold text-blue-900 mb-4">
-                            キー操作の確認
+                    <div className="bg-blue-50 rounded-lg p-6 space-y-4">
+                        <h2 className="text-xl font-semibold text-blue-900">
+                            {language === 'ja' ? 'キー操作の確認' : 'Check the key layout'}
                         </h2>
-                        <div className="grid gap-2 text-sm">
-                            <div className="flex justify-between items-center py-2 px-4 bg-white rounded">
-                                <span className="font-mono text-lg">D</span>
-                                <span>その他</span>
-                            </div>
-                            <div className="flex justify-between items-center py-2 px-4 bg-white rounded">
-                                <span className="font-mono text-lg">F</span>
-                                <span className="text-red-600">赤色</span>
-                            </div>
-                            <div className="flex justify-between items-center py-2 px-4 bg-white rounded">
-                                <span className="font-mono text-lg">J</span>
-                                <span className="text-green-600">緑色</span>
-                            </div>
-                            <div className="flex justify-between items-center py-2 px-4 bg-white rounded">
-                                <span className="font-mono text-lg">K</span>
-                                <span className="text-blue-600">青色</span>
-                            </div>
-                        </div>
+                        {renderColoredKeyGuide()}
                     </div>
 
                     <button
                         onClick={handleStartPractice}
                         className="px-8 py-3 text-lg font-semibold text-white bg-green-600 rounded-full hover:bg-green-700 transition-colors"
                     >
-                        練習開始
+                        {language === 'ja' ? '練習開始' : 'Start practice'}
                     </button>
                 </div>
             </main>
@@ -205,7 +232,7 @@ function PracticeContent({ uuid }: PracticeContentProps) {
                         <div className="space-y-6">
                             <div
                                 className="text-8xl font-bold tracking-wider"
-                                style={{ color: COLOR_TO_HEX[currentStimulus.inkColor] }}
+                                style={{ color: PRACTICE_COLOR_HEX[currentStimulus.inkColor] }}
                             >
                                 {currentStimulus.word}
                             </div>
@@ -226,27 +253,12 @@ function PracticeContent({ uuid }: PracticeContentProps) {
                         </div>
                     )}
 
-                    <div className="grid gap-2 text-sm max-w-md mx-auto">
-                        <div className="flex justify-between items-center py-2 px-4 bg-gray-100 rounded">
-                            <span className="font-mono text-lg">D</span>
-                            <span>その他</span>
-                        </div>
-                        <div className="flex justify-between items-center py-2 px-4 bg-gray-100 rounded">
-                            <span className="font-mono text-lg">F</span>
-                            <span className="text-red-600">赤色</span>
-                        </div>
-                        <div className="flex justify-between items-center py-2 px-4 bg-gray-100 rounded">
-                            <span className="font-mono text-lg">J</span>
-                            <span className="text-green-600">緑色</span>
-                        </div>
-                        <div className="flex justify-between items-center py-2 px-4 bg-gray-100 rounded">
-                            <span className="font-mono text-lg">K</span>
-                            <span className="text-blue-600">青色</span>
-                        </div>
+                    <div className="max-w-2xl mx-auto">
+                        {renderColoredKeyGuide()}
                     </div>
 
                     <div className="text-xs text-gray-500">
-                        ESCキーで戻る
+                        {language === 'ja' ? 'ESCキーで戻る' : 'Press ESC to return'}
                     </div>
                 </div>
             </main>
@@ -272,23 +284,29 @@ function PracticeContent({ uuid }: PracticeContentProps) {
                 <div className="max-w-2xl w-full space-y-8 text-center">
                     <div className="space-y-4">
                         <h1 className="text-3xl font-semibold text-gray-900">
-                            練習完了
+                            {language === 'ja' ? '練習完了' : 'Practice complete'}
                         </h1>
                         <p className="text-lg text-gray-600">
-                            お疲れ様でした！練習の結果をご確認ください。
+                            {language === 'ja' ? 'お疲れ様でした！練習の結果をご確認ください。' : 'Nice work—here is a quick summary of your practice.'}
                         </p>
                     </div>
 
                     <div className="bg-gray-50 rounded-lg p-6 space-y-4">
-                        <h2 className="text-xl font-semibold">結果</h2>
+                        <h2 className="text-xl font-semibold">
+                            {language === 'ja' ? '結果' : 'Results'}
+                        </h2>
                         <div className="grid gap-4 sm:grid-cols-2">
                             <div className="bg-white p-4 rounded-lg">
                                 <div className="text-2xl font-bold text-blue-600">{accuracy}%</div>
-                                <div className="text-sm text-gray-600">正答率</div>
+                                <div className="text-sm text-gray-600">
+                                    {language === 'ja' ? '正答率' : 'Accuracy'}
+                                </div>
                             </div>
                             <div className="bg-white p-4 rounded-lg">
                                 <div className="text-2xl font-bold text-green-600">{avgRT}ms</div>
-                                <div className="text-sm text-gray-600">平均反応時間</div>
+                                <div className="text-sm text-gray-600">
+                                    {language === 'ja' ? '平均反応時間' : 'Average RT'}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -310,7 +328,11 @@ function PracticeContent({ uuid }: PracticeContentProps) {
                     </div>
 
                     <div className="text-sm text-gray-500">
-                        <p>本番実験では480試行（60試行 × 8ブロック）を行います。</p>
+                        <p>
+                            {language === 'ja'
+                                ? `本番実験では${totalTrials}試行（${trialsPerBlock}試行 × ${totalBlocks}ブロック）を行います。`
+                                : `The main task contains ${totalTrials} trials (${trialsPerBlock} per block × ${totalBlocks} blocks).`}
+                        </p>
                     </div>
                 </div>
             </main>

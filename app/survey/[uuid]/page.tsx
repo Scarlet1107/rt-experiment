@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, use, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { LanguageProvider, useLanguage } from '../../../lib/i18n';
-import { saveParticipant } from '../../../lib/storage';
+import { saveParticipant, saveParticipantToSupabase, getParticipantFromSupabase } from '../../../lib/storage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,8 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { User, GraduationCap, Hand, Calendar, Users, MessageCircle, X } from 'lucide-react';
+import { User, GraduationCap, Hand, Calendar, Users, MessageCircle } from 'lucide-react';
+import type { TonePreference, MotivationStyle, EvaluationFocus, ParticipantRow } from '@/types';
 
 interface SurveyFormData {
     // 基本情報
@@ -19,49 +20,144 @@ interface SurveyFormData {
     studentId: string;
     handedness: 'right' | 'left' | 'other' | '';
     age: string;
-    gender: 'male' | 'female' | 'other' | 'no-answer' | '';
+    gender: 'male' | 'female' | 'other' | '';
 
     // パーソナライゼーション情報
     nickname: string;
     preferredPraise: string[];
-    avoidExpressions: string[];
+    tonePreference: TonePreference | '';
+    motivationStyle: MotivationStyle | '';
+    evaluationFocus: EvaluationFocus | '';
 }
 
 // 褒め方の選択肢
 const PRAISE_OPTIONS = {
     ja: [
-        { id: 'great', label: '「すごい！」「素晴らしい！」' },
-        { id: 'good', label: '「いいね！」「良くできました」' },
-        { id: 'perfect', label: '「完璧！」「パーフェクト！」' },
-        { id: 'amazing', label: '「すばらしい！」「驚きです！」' },
-        { id: 'excellent', label: '「優秀！」「エクセレント！」' },
-        { id: 'wonderful', label: '「素敵！」「ワンダフル！」' },
-        { id: 'awesome', label: '「最高！」「オーサム！」' },
-        { id: 'brilliant', label: '「輝いてる！」「ブリリアント！」' },
-        { id: 'outstanding', label: '「際立ってる！」「アウトスタンディング！」' },
-        { id: 'impressive', label: '「印象的！」「インプレッシブ！」' },
-        { id: 'fantastic', label: '「幻想的！」「ファンタスティック！」' },
-        { id: 'superb', label: '「上質！」「スーパーブ！」' },
-        { id: 'gentle', label: '「よくできたね」「頑張ったね」' },
-        { id: 'encouraging', label: '「その調子！」「継続は力なり」' },
-        { id: 'friendly', label: '「ナイス！」「グッジョブ！」' },
+        { id: 'casual-friendly', label: 'フレンドリーに「いい感じ！」と言われたい' },
+        { id: 'gentle-soft', label: 'やさしく「大丈夫だよ」と声をかけてほしい' },
+        { id: 'formal-solid', label: '落ち着いた丁寧な言葉で評価してほしい' },
+        { id: 'growth-focus', label: '前回より成長した点を具体的に褒めてほしい' },
+        { id: 'social-focus', label: '平均より頑張れている点を伝えてほしい' },
+        { id: 'positive-focus', label: '良かった部分だけをシンプルに褒めてほしい' },
     ],
     en: [
-        { id: 'great', label: 'Great! Wonderful!' },
-        { id: 'good', label: 'Good! Well done!' },
-        { id: 'perfect', label: 'Perfect! Flawless!' },
-        { id: 'amazing', label: 'Amazing! Incredible!' },
-        { id: 'excellent', label: 'Excellent! Outstanding!' },
-        { id: 'wonderful', label: 'Wonderful! Marvelous!' },
-        { id: 'awesome', label: 'Awesome! Fantastic!' },
-        { id: 'brilliant', label: 'Brilliant! Genius!' },
-        { id: 'outstanding', label: 'Outstanding! Remarkable!' },
-        { id: 'impressive', label: 'Impressive! Striking!' },
-        { id: 'fantastic', label: 'Fantastic! Fabulous!' },
-        { id: 'superb', label: 'Superb! Magnificent!' },
-        { id: 'gentle', label: 'Well done! Keep it up!' },
-        { id: 'encouraging', label: 'Keep going! You got this!' },
-        { id: 'friendly', label: 'Nice! Good job!' },
+        { id: 'casual-friendly', label: 'Casual “Nice job!” praise feels best' },
+        { id: 'gentle-soft', label: 'I like gentle reminders like “You’re doing fine”' },
+        { id: 'formal-solid', label: 'Prefer calm, polite acknowledgement' },
+        { id: 'growth-focus', label: 'Please highlight how I improved from before' },
+        { id: 'social-focus', label: 'Tell me when I’m doing better than average' },
+        { id: 'positive-focus', label: 'Just point out the good moments simply' },
+    ]
+};
+
+const TONE_OPTIONS = {
+    ja: [
+        {
+            value: 'casual' as TonePreference,
+            title: '友達みたいに気軽に！',
+            description: '例：「いい感じだね〜！」「ナイス！」'
+        },
+        {
+            value: 'gentle' as TonePreference,
+            title: '少し丁寧でやさしく',
+            description: '例：「いいペースですね」「落ち着いていきましょう」'
+        },
+        {
+            value: 'formal' as TonePreference,
+            title: 'しっかり丁寧に',
+            description: '例：「非常に良い反応です」「引き続き頑張ってください」'
+        }
+    ],
+    en: [
+        {
+            value: 'casual' as TonePreference,
+            title: 'Friendly & casual',
+            description: 'e.g., “Looking great!” “Nice!”'
+        },
+        {
+            value: 'gentle' as TonePreference,
+            title: 'Polite but soft',
+            description: 'e.g., “Good pace so far” “Let’s stay calm”'
+        },
+        {
+            value: 'formal' as TonePreference,
+            title: 'Formal & respectful',
+            description: 'e.g., “Excellent responses” “Please keep it up”'
+        }
+    ]
+};
+
+const MOTIVATION_OPTIONS = {
+    ja: [
+        {
+            value: 'empathetic' as MotivationStyle,
+            title: 'やさしく共感してほしい',
+            description: '例：「大丈夫、焦らなくていいよ」'
+        },
+        {
+            value: 'cheerleader' as MotivationStyle,
+            title: '熱く応援してほしい',
+            description: '例：「その調子！絶対いける！」'
+        },
+        {
+            value: 'advisor' as MotivationStyle,
+            title: '落ち着いたアドバイスが欲しい',
+            description: '例：「一度深呼吸してリズムを整えよう」'
+        }
+    ],
+    en: [
+        {
+            value: 'empathetic' as MotivationStyle,
+            title: 'Gentle empathy',
+            description: 'e.g., “It’s okay, no rush.”'
+        },
+        {
+            value: 'cheerleader' as MotivationStyle,
+            title: 'Hype me up!',
+            description: 'e.g., “You got this! Keep pushing!”'
+        },
+        {
+            value: 'advisor' as MotivationStyle,
+            title: 'Calm advice',
+            description: 'e.g., “Take a breath and find your rhythm.”'
+        }
+    ]
+};
+
+const EVALUATION_OPTIONS = {
+    ja: [
+        {
+            value: 'self-progress' as EvaluationFocus,
+            title: '過去の自分と比べたい',
+            description: '「前回より速くなったよ！」など'
+        },
+        {
+            value: 'social-comparison' as EvaluationFocus,
+            title: '平均より上だと嬉しい',
+            description: '「上位◯%のスピードです」など'
+        },
+        {
+            value: 'positive-focus' as EvaluationFocus,
+            title: '良かった部分をシンプルに',
+            description: 'ポジティブな点のみ伝えてほしい'
+        }
+    ],
+    en: [
+        {
+            value: 'self-progress' as EvaluationFocus,
+            title: 'Compare with my past self',
+            description: 'e.g., “Faster than your last block!”'
+        },
+        {
+            value: 'social-comparison' as EvaluationFocus,
+            title: 'Compare with others',
+            description: 'e.g., “Above average speed!”'
+        },
+        {
+            value: 'positive-focus' as EvaluationFocus,
+            title: 'Highlight positives only',
+            description: 'Keep it simple and upbeat'
+        }
     ]
 };
 
@@ -70,8 +166,10 @@ interface SurveyContentProps {
 }
 
 function SurveyContent({ uuid }: SurveyContentProps) {
-    const { language } = useLanguage();
+    const { language, t } = useLanguage();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const condition = (searchParams.get('condition') as 'static' | 'personalized') || 'static';
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState<SurveyFormData>({
         name: '',
@@ -81,12 +179,102 @@ function SurveyContent({ uuid }: SurveyContentProps) {
         gender: '',
         nickname: '',
         preferredPraise: [],
-        avoidExpressions: [],
+        tonePreference: '',
+        motivationStyle: '',
+        evaluationFocus: '',
     });
 
     const [errors, setErrors] = useState<Partial<Record<keyof SurveyFormData, string>>>({});
+    const [existingParticipant, setExistingParticipant] = useState<ParticipantRow | null>(null);
+    const [showForm, setShowForm] = useState(true);
+    const [isCheckingProfile, setIsCheckingProfile] = useState(true);
 
     const praiseOptions = PRAISE_OPTIONS[language as 'ja' | 'en'] || PRAISE_OPTIONS.ja;
+    const toneOptions = TONE_OPTIONS[language as 'ja' | 'en'] || TONE_OPTIONS.ja;
+    const motivationOptions = MOTIVATION_OPTIONS[language as 'ja' | 'en'] || MOTIVATION_OPTIONS.ja;
+    const evaluationOptions = EVALUATION_OPTIONS[language as 'ja' | 'en'] || EVALUATION_OPTIONS.ja;
+    const genderLabels = language === 'ja'
+        ? { male: '男性', female: '女性', other: 'その他' }
+        : { male: 'Male', female: 'Female', other: 'Other' };
+    const savingLabel = language === 'ja' ? '保存中...' : 'Saving...';
+    const multiSelectNote = language === 'ja' ? '（複数選択可）' : '(Multiple selections)';
+    const selectedLabel = language === 'ja' ? '選択済み' : 'Selected';
+    const selectionCountSuffix = language === 'ja' ? '個' : '';
+    const selectedChipLabel = language === 'ja' ? '選択中' : 'Selected';
+    const checkingLabel = language === 'ja' ? 'プロフィールを確認しています...' : 'Checking existing profile...';
+    const continueLabel = language === 'ja' ? 'この情報で続行' : 'Continue with this profile';
+    const updateLabel = language === 'ja' ? '回答を更新する' : 'Update responses';
+    const surveyCopy = useMemo(() => ({
+        existingTitle: language === 'ja' ? '事前ヒアリング済み' : 'Profile already completed',
+        existingDescription: language === 'ja'
+            ? '以前の回答が見つかりました。この情報を再利用するか、更新してください。'
+            : 'We found your previous responses. You can reuse them or update your answers.',
+        summaryLabels: {
+            name: language === 'ja' ? '名前' : 'Name',
+            nickname: language === 'ja' ? 'ニックネーム' : 'Nickname',
+            handedness: language === 'ja' ? '利き手' : 'Handedness',
+            gender: language === 'ja' ? '性別' : 'Gender',
+            praise: language === 'ja' ? '好きな褒め方' : 'Preferred praise'
+        },
+        basicInfoTitle: language === 'ja' ? '基本情報' : 'Basic information',
+        nameLabel: language === 'ja' ? '名前 *' : 'Name *',
+        namePlaceholder: language === 'ja' ? '山田太郎' : 'Alex Johnson',
+        studentIdLabel: language === 'ja' ? '学籍番号 *' : 'Student ID *',
+        studentIdPlaceholder: language === 'ja' ? 'B1234567' : 'e.g., B1234567',
+        handednessLabel: language === 'ja' ? '利き手 *' : 'Handedness *',
+        handednessOptions: {
+            right: language === 'ja' ? '右利き' : 'Right-handed',
+            left: language === 'ja' ? '左利き' : 'Left-handed',
+            other: language === 'ja' ? 'その他・回答しない' : 'Other / Prefer not to say'
+        },
+        ageLabel: language === 'ja' ? '年齢 *' : 'Age *',
+        agePlaceholder: language === 'ja' ? '20' : '20',
+        genderLabel: language === 'ja' ? '性別 *' : 'Gender *',
+        personalizationTitle: language === 'ja' ? 'パーソナライゼーション設定' : 'Personalization settings',
+        personalizationSubtitle: language === 'ja'
+            ? '実験中に表示されるフィードバックをあなた好みにカスタマイズします'
+            : 'Customize how feedback sounds during the experiment.',
+        clearLabel: language === 'ja' ? 'クリア' : 'Clear',
+        requiredFootnote: language === 'ja' ? '* 必須項目' : '* Required field',
+        privacyFootnote: language === 'ja'
+            ? 'この情報は研究目的にのみ使用され、個人情報は厳格に保護されます'
+            : 'Information is used only for research, and personal data remains protected.'
+    }), [language]);
+
+    useEffect(() => {
+        const fetchExistingProfile = async () => {
+            try {
+                const record = await getParticipantFromSupabase(uuid);
+                if (record && record.name) {
+                    setExistingParticipant(record as ParticipantRow);
+                    setFormData({
+                        name: record.name ?? '',
+                        studentId: record.student_id ?? '',
+                        handedness: (record.handedness as SurveyFormData['handedness']) || '',
+                        age: record.age ? String(record.age) : '',
+                        gender: (record.gender as SurveyFormData['gender']) || '',
+                        nickname: record.nickname ?? '',
+                        preferredPraise: record.preferred_praise
+                            ? record.preferred_praise
+                                .split(',')
+                                .map((item: string) => item.trim())
+                                .filter(Boolean)
+                            : [],
+                        tonePreference: (record.tone_preference as TonePreference) || '',
+                        motivationStyle: (record.motivation_style as MotivationStyle) || '',
+                        evaluationFocus: (record.evaluation_focus as EvaluationFocus) || '',
+                    });
+                    setShowForm(false);
+                }
+            } catch (error) {
+                console.info('No remote profile found for participant', uuid, error);
+            } finally {
+                setIsCheckingProfile(false);
+            }
+        };
+
+        fetchExistingProfile();
+    }, [uuid]);
 
     const validateForm = (): boolean => {
         const newErrors: Partial<Record<keyof SurveyFormData, string>> = {};
@@ -121,6 +309,18 @@ function SurveyContent({ uuid }: SurveyContentProps) {
             newErrors.preferredPraise = language === 'ja' ? '好きな褒め方を1つ以上選択してください' : 'Please select at least one preferred praise style';
         }
 
+        if (!formData.tonePreference) {
+            newErrors.tonePreference = language === 'ja' ? '口調タイプを選択してください' : 'Please select a tone preference';
+        }
+
+        if (!formData.motivationStyle) {
+            newErrors.motivationStyle = language === 'ja' ? '励まし方を選択してください' : 'Please select a motivation style';
+        }
+
+        if (!formData.evaluationFocus) {
+            newErrors.evaluationFocus = language === 'ja' ? '評価のされ方を選択してください' : 'Please choose an evaluation focus';
+        }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -143,19 +343,22 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                 gender: formData.gender,
                 nickname: formData.nickname.trim(),
                 preferredPraise: formData.preferredPraise.join(', '),
-                avoidExpressions: formData.avoidExpressions,
+                tonePreference: formData.tonePreference as TonePreference,
+                motivationStyle: formData.motivationStyle as MotivationStyle,
+                evaluationFocus: formData.evaluationFocus as EvaluationFocus,
                 language,
                 createdAt: new Date(),
             };
 
             await saveParticipant(participantData);
+            await saveParticipantToSupabase(participantData);
 
             // ローカルストレージにも保存
             localStorage.setItem(`participant-${uuid}`, JSON.stringify(participantData));
 
             // 少し待ってから注意事項ページに遷移
             setTimeout(() => {
-                router.push(`/instructions/${uuid}`);
+                router.push(`/instructions/${uuid}?condition=${condition}`);
             }, 500);
 
         } catch (error) {
@@ -164,6 +367,10 @@ function SurveyContent({ uuid }: SurveyContentProps) {
             // エラーハンドリング
             alert(language === 'ja' ? 'データの保存に失敗しました。もう一度お試しください。' : 'Failed to save data. Please try again.');
         }
+    };
+
+    const proceedWithExistingProfile = () => {
+        router.push(`/instructions/${uuid}?condition=${condition}`);
     };
 
     const handleInputChange = (field: keyof SurveyFormData, value: string | string[]) => {
@@ -194,26 +401,96 @@ function SurveyContent({ uuid }: SurveyContentProps) {
         });
     };
 
-    const addAvoidExpression = (expression: string) => {
-        if (expression.trim() && !formData.avoidExpressions.includes(expression.trim())) {
-            handleInputChange('avoidExpressions', [...formData.avoidExpressions, expression.trim()]);
-        }
-    };
+    const renderQuestionHeading = (
+        numberLabel: string,
+        title: string,
+        description: string,
+        accentClass: string
+    ) => (
+        <div className="space-y-1">
+            <div className="flex items-center gap-3">
+                <span className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm font-semibold ${accentClass}`}>
+                    {numberLabel}
+                </span>
+                <span className="text-xl font-semibold text-foreground">{title}</span>
+            </div>
+            <p className="text-sm text-muted-foreground pl-12">{description}</p>
+        </div>
+    );
 
-    const removeAvoidExpression = (expression: string) => {
-        handleInputChange('avoidExpressions', formData.avoidExpressions.filter(e => e !== expression));
-    };
+    if (isCheckingProfile) {
+        return (
+            <main className="min-h-screen bg-background flex items-center justify-center px-6 py-12">
+                <div className="max-w-3xl w-full">
+                    <Card>
+                        <CardContent className="p-8 text-center space-y-4">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                            <p className="text-muted-foreground">{checkingLabel}</p>
+                        </CardContent>
+                    </Card>
+                </div>
+            </main>
+        );
+    }
 
-    const [avoidExpressionInput, setAvoidExpressionInput] = useState('');
+    if (existingParticipant && !showForm) {
+        return (
+            <main className="min-h-screen bg-background flex items-center justify-center px-6 py-12">
+                <div className="max-w-3xl w-full space-y-6">
+                    <Card>
+                        <CardHeader className="text-center space-y-3">
+                            <CardTitle className="text-3xl">{surveyCopy.existingTitle}</CardTitle>
+                            <CardDescription>
+                                {surveyCopy.existingDescription}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <p className="text-sm text-muted-foreground">{surveyCopy.summaryLabels.name}</p>
+                                    <p className="font-semibold">{existingParticipant.name || '-'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-muted-foreground">{surveyCopy.summaryLabels.nickname}</p>
+                                    <p className="font-semibold">{existingParticipant.nickname || '-'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-muted-foreground">{surveyCopy.summaryLabels.handedness}</p>
+                                    <p className="font-semibold">{existingParticipant.handedness || '-'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-muted-foreground">{surveyCopy.summaryLabels.gender}</p>
+                                    <p className="font-semibold">{existingParticipant.gender || '-'}</p>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <p className="text-sm text-muted-foreground">{surveyCopy.summaryLabels.praise}</p>
+                                    <p className="font-semibold break-words">{existingParticipant.preferred_praise || '-'}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <Button className="flex-1" onClick={proceedWithExistingProfile}>
+                                    {continueLabel}
+                                </Button>
+                                <Button className="flex-1" variant="outline" onClick={() => setShowForm(true)}>
+                                    {updateLabel}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            </main>
+        );
+    }
 
     return (
         <main className="min-h-screen bg-background flex items-center justify-center px-6 py-12">
             <div className="max-w-4xl w-full space-y-8">
                 <Card>
                     <CardHeader className="text-center">
-                        <CardTitle className="text-3xl">事前アンケート</CardTitle>
+                        <CardTitle className="text-3xl">{t.survey.title}</CardTitle>
                         <CardDescription className="text-lg">
-                            実験参加前の基本情報とパーソナライゼーション設定
+                            {t.survey.subtitle}
                         </CardDescription>
                     </CardHeader>
 
@@ -225,22 +502,35 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                 <CardHeader>
                                     <CardTitle className="flex items-center text-xl">
                                         <User className="mr-2 h-5 w-5" />
-                                        基本情報
+                                        {surveyCopy.basicInfoTitle}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-6">
 
                                     {/* 名前 */}
                                     <div className="space-y-2">
-                                        <Label htmlFor="name">名前 *</Label>
-                                        <Input
-                                            id="name"
-                                            value={formData.name}
-                                            onChange={(e) => handleInputChange('name', e.target.value)}
-                                            placeholder="山田太郎"
-                                            disabled={isSubmitting}
-                                            className={errors.name ? 'border-red-500' : ''}
-                                        />
+                                        <Label htmlFor="name">{surveyCopy.nameLabel}</Label>
+                                        <div className="relative">
+                                            <Input
+                                                id="name"
+                                                value={formData.name}
+                                                onChange={(e) => handleInputChange('name', e.target.value)}
+                                                placeholder={surveyCopy.namePlaceholder}
+                                                disabled={isSubmitting}
+                                                className={`pr-16 ${errors.name ? 'border-red-500' : ''}`}
+                                            />
+                                            {formData.name && (
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="absolute right-1 top-1 h-7 text-xs"
+                                                    onClick={() => handleInputChange('name', '')}
+                                                >
+                                                    {surveyCopy.clearLabel}
+                                                </Button>
+                                            )}
+                                        </div>
                                         {errors.name && (
                                             <p className="text-sm text-red-600">{errors.name}</p>
                                         )}
@@ -250,16 +540,29 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                     <div className="space-y-2">
                                         <Label htmlFor="studentId" className="flex items-center">
                                             <GraduationCap className="mr-1 h-4 w-4" />
-                                            学籍番号 *
+                                            {surveyCopy.studentIdLabel}
                                         </Label>
-                                        <Input
-                                            id="studentId"
-                                            value={formData.studentId}
-                                            onChange={(e) => handleInputChange('studentId', e.target.value)}
-                                            placeholder="B1234567"
-                                            disabled={isSubmitting}
-                                            className={errors.studentId ? 'border-red-500' : ''}
-                                        />
+                                        <div className="relative">
+                                            <Input
+                                                id="studentId"
+                                                value={formData.studentId}
+                                                onChange={(e) => handleInputChange('studentId', e.target.value)}
+                                                placeholder={surveyCopy.studentIdPlaceholder}
+                                                disabled={isSubmitting}
+                                                className={`pr-16 ${errors.studentId ? 'border-red-500' : ''}`}
+                                            />
+                                            {formData.studentId && (
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="absolute right-1 top-1 h-7 text-xs"
+                                                    onClick={() => handleInputChange('studentId', '')}
+                                                >
+                                                    {surveyCopy.clearLabel}
+                                                </Button>
+                                            )}
+                                        </div>
                                         {errors.studentId && (
                                             <p className="text-sm text-red-600">{errors.studentId}</p>
                                         )}
@@ -270,7 +573,7 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                         <div className="space-y-3">
                                             <Label className="flex items-center">
                                                 <Hand className="mr-1 h-4 w-4" />
-                                                利き手 *
+                                                {surveyCopy.handednessLabel}
                                             </Label>
                                             <RadioGroup
                                                 value={formData.handedness}
@@ -279,15 +582,15 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                             >
                                                 <div className="flex items-center space-x-2">
                                                     <RadioGroupItem value="right" id="right" />
-                                                    <Label htmlFor="right">右利き</Label>
+                                                    <Label htmlFor="right">{surveyCopy.handednessOptions.right}</Label>
                                                 </div>
                                                 <div className="flex items-center space-x-2">
                                                     <RadioGroupItem value="left" id="left" />
-                                                    <Label htmlFor="left">左利き</Label>
+                                                    <Label htmlFor="left">{surveyCopy.handednessOptions.left}</Label>
                                                 </div>
                                                 <div className="flex items-center space-x-2">
                                                     <RadioGroupItem value="other" id="handedness-other" />
-                                                    <Label htmlFor="handedness-other">その他・回答しない</Label>
+                                                    <Label htmlFor="handedness-other">{surveyCopy.handednessOptions.other}</Label>
                                                 </div>
                                             </RadioGroup>
                                             {errors.handedness && (
@@ -299,19 +602,32 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                         <div className="space-y-2">
                                             <Label htmlFor="age" className="flex items-center">
                                                 <Calendar className="mr-1 h-4 w-4" />
-                                                年齢 *
+                                                {surveyCopy.ageLabel}
                                             </Label>
-                                            <Input
-                                                id="age"
-                                                type="number"
-                                                min="1"
-                                                max="150"
-                                                value={formData.age}
-                                                onChange={(e) => handleInputChange('age', e.target.value)}
-                                                placeholder="20"
-                                                disabled={isSubmitting}
-                                                className={errors.age ? 'border-red-500' : ''}
-                                            />
+                                            <div className="relative">
+                                                <Input
+                                                    id="age"
+                                                    type="number"
+                                                    min="1"
+                                                    max="150"
+                                                    value={formData.age}
+                                                    onChange={(e) => handleInputChange('age', e.target.value)}
+                                                    placeholder={surveyCopy.agePlaceholder}
+                                                    disabled={isSubmitting}
+                                                    className={`pr-16 ${errors.age ? 'border-red-500' : ''}`}
+                                                />
+                                                {formData.age && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="absolute right-1 top-1 h-7 text-xs"
+                                                        onClick={() => handleInputChange('age', '')}
+                                                    >
+                                                        {surveyCopy.clearLabel}
+                                                    </Button>
+                                                )}
+                                            </div>
                                             {errors.age && (
                                                 <p className="text-sm text-red-600">{errors.age}</p>
                                             )}
@@ -322,30 +638,27 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                     <div className="space-y-3">
                                         <Label className="flex items-center">
                                             <Users className="mr-1 h-4 w-4" />
-                                            性別 *
+                                            {surveyCopy.genderLabel}
                                         </Label>
                                         <RadioGroup
                                             value={formData.gender}
                                             onValueChange={(value) => handleInputChange('gender', value)}
                                             disabled={isSubmitting}
-                                            className="grid grid-cols-2 gap-4"
+                                            className="grid gap-3 sm:grid-cols-3"
                                         >
-                                            <div className="flex items-center space-x-2">
-                                                <RadioGroupItem value="male" id="male" />
-                                                <Label htmlFor="male">男性</Label>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <RadioGroupItem value="female" id="female" />
-                                                <Label htmlFor="female">女性</Label>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <RadioGroupItem value="other" id="gender-other" />
-                                                <Label htmlFor="gender-other">その他</Label>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <RadioGroupItem value="no-answer" id="no-answer" />
-                                                <Label htmlFor="no-answer">回答しない</Label>
-                                            </div>
+                                            {(['male', 'female', 'other'] as const).map((value) => (
+                                                <div
+                                                    key={value}
+                                                    className={`flex items-center space-x-2 rounded-full border px-4 py-2 ${formData.gender === value
+                                                        ? 'border-blue-500 bg-blue-50'
+                                                        : 'border-gray-200 bg-white'}`}
+                                                >
+                                                    <RadioGroupItem value={value} id={`gender-${value}`} />
+                                                    <Label htmlFor={`gender-${value}`} className="text-sm font-medium cursor-pointer">
+                                                        {genderLabels[value]}
+                                                    </Label>
+                                                </div>
+                                            ))}
                                         </RadioGroup>
                                         {errors.gender && (
                                             <p className="text-sm text-red-600">{errors.gender}</p>
@@ -357,54 +670,170 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                             <Separator />
 
                             {/* パーソナライゼーション設定セクション */}
-                            <Card className="border-green-200">
+                            <Card className="border-green-200 shadow-[0_10px_40px_rgba(16,185,129,0.15)]">
                                 <CardHeader>
-                                    <CardTitle className="flex items-center text-xl">
-                                        <MessageCircle className="mr-2 h-5 w-5" />
-                                        パーソナライゼーション設定
+                                    <CardTitle className="flex items-center text-2xl font-bold text-green-900">
+                                        <MessageCircle className="mr-3 h-6 w-6" />
+                                        {surveyCopy.personalizationTitle}
                                     </CardTitle>
-                                    <CardDescription>
-                                        実験中に表示されるフィードバックをあなた好みにカスタマイズします
+                                    <CardDescription className="text-base text-green-900/80">
+                                        {surveyCopy.personalizationSubtitle}
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-6">
 
                                     {/* ニックネーム */}
                                     <div className="space-y-2">
-                                        <Label htmlFor="nickname">フィードバックで呼ばれたいニックネーム *</Label>
-                                        <Input
-                                            id="nickname"
-                                            value={formData.nickname}
-                                            onChange={(e) => handleInputChange('nickname', e.target.value)}
-                                            placeholder="太郎"
-                                            disabled={isSubmitting}
-                                            className={errors.nickname ? 'border-red-500' : ''}
-                                        />
+                                        <Label htmlFor="nickname">{t.survey.nickname} *</Label>
+                                        <div className="relative">
+                                            <Input
+                                                id="nickname"
+                                                value={formData.nickname}
+                                                onChange={(e) => handleInputChange('nickname', e.target.value)}
+                                                placeholder={t.survey.nicknamePlaceholder}
+                                                disabled={isSubmitting}
+                                                className={`pr-16 ${errors.nickname ? 'border-red-500' : ''}`}
+                                            />
+                                            {formData.nickname && (
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="absolute right-1 top-1 h-7 text-xs"
+                                                    onClick={() => handleInputChange('nickname', '')}
+                                                >
+                                                    {surveyCopy.clearLabel}
+                                                </Button>
+                                            )}
+                                        </div>
                                         <p className="text-xs text-muted-foreground">
-                                            実験中のフィードバックで使用される名前です
+                                            {t.survey.nicknameHelper}
                                         </p>
                                         {errors.nickname && (
                                             <p className="text-sm text-red-600">{errors.nickname}</p>
                                         )}
                                     </div>
 
+                                    {/* 口調タイプ */}
+                                    <div className="space-y-4">
+                                        {renderQuestionHeading('01', t.survey.toneQuestionTitle, t.survey.toneQuestionDescription, 'border-blue-300 bg-blue-50 text-blue-900')}
+                                        <RadioGroup
+                                            value={formData.tonePreference}
+                                            onValueChange={(value) => handleInputChange('tonePreference', value)}
+                                            disabled={isSubmitting}
+                                            className="space-y-3"
+                                        >
+                                            {toneOptions.map((option) => (
+                                                <Label
+                                                    key={option.value}
+                                                    htmlFor={`tone-${option.value}`}
+                                                    className={`flex gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${formData.tonePreference === option.value
+                                                        ? 'border-blue-500 bg-blue-50'
+                                                        : 'border-gray-200 hover:border-gray-300'}`}
+                                                >
+                                                    <RadioGroupItem
+                                                        value={option.value}
+                                                        id={`tone-${option.value}`}
+                                                        className="mt-1"
+                                                    />
+                                                    <div>
+                                                        <span className="font-semibold">{option.title}</span>
+                                                        <p className="text-sm text-muted-foreground mt-1">{option.description}</p>
+                                                    </div>
+                                                </Label>
+                                            ))}
+                                        </RadioGroup>
+                                        {errors.tonePreference && (
+                                            <p className="text-sm text-red-600">{errors.tonePreference}</p>
+                                        )}
+                                    </div>
+
+                                    {/* 励ましタイプ */}
+                                    <div className="space-y-4">
+                                        {renderQuestionHeading('02', t.survey.motivationQuestionTitle, t.survey.motivationQuestionDescription, 'border-emerald-300 bg-emerald-50 text-emerald-900')}
+                                        <RadioGroup
+                                            value={formData.motivationStyle}
+                                            onValueChange={(value) => handleInputChange('motivationStyle', value)}
+                                            disabled={isSubmitting}
+                                            className="space-y-3"
+                                        >
+                                            {motivationOptions.map((option) => (
+                                                <Label
+                                                    key={option.value}
+                                                    htmlFor={`motivation-${option.value}`}
+                                                    className={`flex gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${formData.motivationStyle === option.value
+                                                        ? 'border-green-500 bg-green-50'
+                                                        : 'border-gray-200 hover:border-gray-300'}`}
+                                                >
+                                                    <RadioGroupItem
+                                                        value={option.value}
+                                                        id={`motivation-${option.value}`}
+                                                        className="mt-1"
+                                                    />
+                                                    <div>
+                                                        <span className="font-semibold">{option.title}</span>
+                                                        <p className="text-sm text-muted-foreground mt-1">{option.description}</p>
+                                                    </div>
+                                                </Label>
+                                            ))}
+                                        </RadioGroup>
+                                        {errors.motivationStyle && (
+                                            <p className="text-sm text-red-600">{errors.motivationStyle}</p>
+                                        )}
+                                    </div>
+
+                                    {/* 評価タイプ */}
+                                    <div className="space-y-4">
+                                        {renderQuestionHeading('03', t.survey.evaluationQuestionTitle, t.survey.evaluationQuestionDescription, 'border-purple-300 bg-purple-50 text-purple-900')}
+                                        <RadioGroup
+                                            value={formData.evaluationFocus}
+                                            onValueChange={(value) => handleInputChange('evaluationFocus', value)}
+                                            disabled={isSubmitting}
+                                            className="space-y-3"
+                                        >
+                                            {evaluationOptions.map((option) => (
+                                                <Label
+                                                    key={option.value}
+                                                    htmlFor={`evaluation-${option.value}`}
+                                                    className={`flex gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${formData.evaluationFocus === option.value
+                                                        ? 'border-purple-500 bg-purple-50'
+                                                        : 'border-gray-200 hover:border-gray-300'}`}
+                                                >
+                                                    <RadioGroupItem
+                                                        value={option.value}
+                                                        id={`evaluation-${option.value}`}
+                                                        className="mt-1"
+                                                    />
+                                                    <div>
+                                                        <span className="font-semibold">{option.title}</span>
+                                                        <p className="text-sm text-muted-foreground mt-1">{option.description}</p>
+                                                    </div>
+                                                </Label>
+                                            ))}
+                                        </RadioGroup>
+                                        {errors.evaluationFocus && (
+                                            <p className="text-sm text-red-600">{errors.evaluationFocus}</p>
+                                        )}
+                                    </div>
+
                                     {/* 好きな褒め方（複数選択可能） */}
                                     <div className="space-y-3">
-                                        <Label>好きな褒め方 * （複数選択可）</Label>
+                                        <Label>{t.survey.preferredPraise} * {multiSelectNote}</Label>
+                                        <p className="text-xs text-muted-foreground">{t.survey.preferredPraiseHint}</p>
                                         <div className="grid gap-3 md:grid-cols-2">
                                             {praiseOptions.map((option) => (
                                                 <div
                                                     key={option.id}
                                                     onClick={() => togglePraiseOption(option.id)}
                                                     className={`p-3 border rounded-lg cursor-pointer transition-colors ${formData.preferredPraise.includes(option.label)
-                                                            ? 'border-blue-500 bg-blue-50'
-                                                            : 'border-gray-200 hover:border-gray-300'
+                                                        ? 'border-blue-500 bg-blue-50'
+                                                        : 'border-gray-200 hover:border-gray-300'
                                                         }`}
                                                 >
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-sm">{option.label}</span>
                                                         {formData.preferredPraise.includes(option.label) && (
-                                                            <Badge variant="default" className="ml-2">選択中</Badge>
+                                                            <Badge variant="default" className="ml-2">{selectedChipLabel}</Badge>
                                                         )}
                                                     </div>
                                                 </div>
@@ -413,7 +842,7 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                         {formData.preferredPraise.length > 0 && (
                                             <div className="mt-2">
                                                 <p className="text-sm text-muted-foreground mb-2">
-                                                    選択済み ({formData.preferredPraise.length}個):
+                                                    {selectedLabel} ({formData.preferredPraise.length}{selectionCountSuffix})
                                                 </p>
                                                 <div className="flex flex-wrap gap-2">
                                                     {formData.preferredPraise.map((praise, index) => (
@@ -429,60 +858,6 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                         )}
                                     </div>
 
-                                    {/* 避けてほしい表現 */}
-                                    <div className="space-y-3">
-                                        <Label htmlFor="avoidExpressionInput">避けてほしい表現（任意）</Label>
-                                        <div className="flex gap-2">
-                                            <Input
-                                                id="avoidExpressionInput"
-                                                value={avoidExpressionInput}
-                                                onChange={(e) => setAvoidExpressionInput(e.target.value)}
-                                                placeholder="例：頑張って、すごい"
-                                                disabled={isSubmitting}
-                                                onKeyPress={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        addAvoidExpression(avoidExpressionInput);
-                                                        setAvoidExpressionInput('');
-                                                    }
-                                                }}
-                                            />
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={() => {
-                                                    addAvoidExpression(avoidExpressionInput);
-                                                    setAvoidExpressionInput('');
-                                                }}
-                                                disabled={isSubmitting || !avoidExpressionInput.trim()}
-                                            >
-                                                追加
-                                            </Button>
-                                        </div>
-                                        {formData.avoidExpressions.length > 0 && (
-                                            <div className="space-y-2">
-                                                <p className="text-sm text-muted-foreground">避けてほしい表現:</p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {formData.avoidExpressions.map((expression, index) => (
-                                                        <Badge
-                                                            key={index}
-                                                            variant="destructive"
-                                                            className="flex items-center gap-1"
-                                                        >
-                                                            {expression}
-                                                            <X
-                                                                className="h-3 w-3 cursor-pointer"
-                                                                onClick={() => removeAvoidExpression(expression)}
-                                                            />
-                                                        </Badge>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        <p className="text-xs text-muted-foreground">
-                                            フィードバックで使用されたくない言葉や表現があれば入力してください
-                                        </p>
-                                    </div>
                                 </CardContent>
                             </Card>
 
@@ -493,13 +868,13 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                     size="lg"
                                     className="px-8"
                                 >
-                                    {isSubmitting ? '保存中...' : '設定を保存して次へ'}
+                                    {isSubmitting ? savingLabel : t.survey.continue}
                                 </Button>
                             </div>
 
                             <div className="text-center text-xs text-muted-foreground space-y-1">
-                                <p>* 必須項目</p>
-                                <p>この情報は研究目的にのみ使用され、個人情報は厳格に保護されます</p>
+                                <p>{surveyCopy.requiredFootnote}</p>
+                                <p>{surveyCopy.privacyFootnote}</p>
                             </div>
                         </form>
                     </CardContent>

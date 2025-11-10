@@ -1,3 +1,5 @@
+import { experimentConfig } from '@/lib/config/experiment';
+
 // 反応時間の外れ値を除去する関数
 export function removeOutliers(reactionTimes: number[]): number[] {
   if (reactionTimes.length === 0) return [];
@@ -17,15 +19,24 @@ export function removeOutliers(reactionTimes: number[]): number[] {
 export function generateStaticFeedback(
   blockIndex: number,
   accuracy: number,
-  averageRT: number
+  averageRT: number,
+  language: 'ja' | 'en' = 'ja'
 ): string {
   const blockNumber = blockIndex + 1;
+
+  if (language === 'en') {
+    return `Block ${blockNumber} summary
+
+Accuracy: ${accuracy.toFixed(1)}%
+Average reaction time: ${averageRT}ms
+Blocks completed: ${blockNumber}/${experimentConfig.totalBlocks}`;
+  }
 
   return `ブロック ${blockNumber} 結果
 
 正答率: ${accuracy.toFixed(1)}%
 平均反応時間: ${averageRT}ms
-完了ブロック: ${blockNumber}/8`;
+完了ブロック: ${blockNumber}/${experimentConfig.totalBlocks}`;
 }
 
 // カラーキーマッピング

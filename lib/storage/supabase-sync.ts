@@ -1,15 +1,21 @@
 import { supabase } from '../../utils/supabase/client';
+import { v5 as uuidv5 } from 'uuid';
 import {
     ParticipantRow,
     ExperimentRow,
     BlockRow,
-    TrialRow
+    TrialRow,
+    TonePreference,
+    MotivationStyle,
+    EvaluationFocus
 } from '../../types';
 import {
     getExperiment,
     updateSyncStatus,
     getPendingSyncExperiments
 } from './indexeddb';
+
+const TRIAL_UUID_NAMESPACE = 'f5f0f5c2-4c70-4c4d-8de5-e6a0c97c7c1f';
 
 /**
  * 実験データをSupabaseに同期
@@ -63,7 +69,9 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
 
             // 3. 試行データを保存
             for (const trial of block.trials) {
-                const trialRow: Omit<TrialRow, 'id'> = {
+                const trialUuid = uuidv5(`${experiment.id}-${block.id}-${trial.id}`, TRIAL_UUID_NAMESPACE);
+                const trialRow: TrialRow = {
+                    id: trialUuid,
                     block_id: block.id,
                     trial_number: trial.id,
                     word: trial.stimulus.word,
@@ -81,7 +89,7 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
 
                 const { error: trialError } = await supabase
                     .from('trials')
-                    .insert(trialRow);
+                    .upsert(trialRow);
 
                 if (trialError) throw trialError;
             }
@@ -103,18 +111,33 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
  */
 export async function saveParticipantToSupabase(participant: {
     id: string;
+    name: string;
+    studentId: string;
+    handedness: string;
+    age: number;
+    gender: string;
     nickname: string;
     preferredPraise: string;
-    avoidExpressions: string[];
+    tonePreference: TonePreference;
+    motivationStyle: MotivationStyle;
+    evaluationFocus: EvaluationFocus;
     language: string;
 }): Promise<boolean> {
     try {
-        const participantRow: Omit<ParticipantRow, 'created_at' | 'updated_at'> = {
+        const participantRow: Omit<ParticipantRow, 'created_at' | 'updated_at'> & { updated_at?: string } = {
             id: participant.id,
+            name: participant.name,
+            student_id: participant.studentId,
+            handedness: participant.handedness,
+            age: participant.age,
+            gender: participant.gender,
             nickname: participant.nickname,
             preferred_praise: participant.preferredPraise,
-            avoid_expressions: participant.avoidExpressions,
+            tone_preference: participant.tonePreference,
+            motivation_style: participant.motivationStyle,
+            evaluation_focus: participant.evaluationFocus,
             language: participant.language,
+            updated_at: new Date().toISOString(),
         };
 
         const { error } = await supabase

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, use } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { LanguageProvider, useLanguage } from '../../../lib/i18n';
 
 interface ConsentContentProps {
@@ -9,9 +9,29 @@ interface ConsentContentProps {
 }
 
 function ConsentContent({ uuid }: ConsentContentProps) {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const condition = (searchParams.get('condition') as 'static' | 'personalized') || 'static';
     const [isAgreeing, setIsAgreeing] = useState(false);
+    const [consentTimestamp, setConsentTimestamp] = useState('');
+
+    useEffect(() => {
+        const formatter = new Intl.DateTimeFormat(
+            language === 'ja' ? 'ja-JP' : 'en-US',
+            {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: language !== 'ja',
+                timeZone: 'Asia/Tokyo',
+            }
+        );
+        setConsentTimestamp(formatter.format(new Date()));
+    }, [language]);
 
     const handleAgree = async () => {
         setIsAgreeing(true);
@@ -24,14 +44,24 @@ function ConsentContent({ uuid }: ConsentContentProps) {
 
         // 少し待ってから事前ヒアリングページに遷移
         setTimeout(() => {
-            router.push(`/survey/${uuid}`);
+            router.push(`/survey/${uuid}?condition=${condition}`);
         }, 500);
     };
 
     const handleDisagree = () => {
         // 参加を辞退した場合はホームに戻る
-        router.push('/');
+        router.push(`/language/${uuid}?condition=${condition}`);
     };
+
+    const colorVisionCopy = language === 'ja'
+        ? 'この実験では、赤・青・緑の3色を文字色として使用します。下記のサンプルを見分けられる方のみご参加いただけます。'
+        : 'This study uses three ink colors—red, blue, and green. Please confirm you can distinguish each color below before participating.';
+
+    const colorSwatches = [
+        { key: 'F', nameJa: '赤 (Fキー)', nameEn: 'Red (F key)', hex: '#ef4444' },
+        { key: 'J', nameJa: '緑 (Jキー)', nameEn: 'Green (J key)', hex: '#22c55e' },
+        { key: 'K', nameJa: '青 (Kキー)', nameEn: 'Blue (K key)', hex: '#2563eb' },
+    ];
 
     return (
         <main className="min-h-screen bg-white text-gray-900 flex flex-col items-center justify-center px-6 py-12">
@@ -49,10 +79,32 @@ function ConsentContent({ uuid }: ConsentContentProps) {
                         </div>
                     </div>
 
+                    <div className="rounded-xl border border-gray-200 bg-white p-5">
+                        <p className="text-sm text-gray-700">
+                            {colorVisionCopy}
+                        </p>
+                        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                            {colorSwatches.map(color => (
+                                <div key={color.key} className="flex flex-col items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-4">
+                                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{color.key}</span>
+                                    <div className="h-16 w-16 rounded-full" style={{ backgroundColor: color.hex }}></div>
+                                    <p className="text-sm font-medium text-gray-800 text-center">
+                                        {language === 'ja' ? color.nameJa : color.nameEn}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
                     <div className="border-t pt-6">
                         <div className="text-sm text-gray-600 space-y-2">
-                            <p><strong>参加者ID:</strong> <code className="bg-gray-200 px-2 py-1 rounded text-xs">{uuid}</code></p>
-                            <p><strong>日時:</strong> {new Date().toLocaleString()}</p>
+                            <p>
+                                <strong>{language === 'ja' ? '参加者ID:' : 'Participant ID:'}</strong>{' '}
+                                <code className="bg-gray-200 px-2 py-1 rounded text-xs">{uuid}</code>
+                            </p>
+                            <p>
+                                <strong>{language === 'ja' ? '日時:' : 'Timestamp:'}</strong> {consentTimestamp || '---'}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -74,7 +126,7 @@ function ConsentContent({ uuid }: ConsentContentProps) {
                         {isAgreeing ? (
                             <>
                                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                処理中...
+                                {language === 'ja' ? '処理中...' : 'Processing...'}
                             </>
                         ) : (
                             t.consent.agree
@@ -84,7 +136,9 @@ function ConsentContent({ uuid }: ConsentContentProps) {
 
                 <div className="text-center">
                     <p className="text-xs text-gray-500">
-                        同意しない場合は、いつでもこのページを離れることができます
+                        {language === 'ja'
+                            ? '同意しない場合は、いつでもこのページを離れることができます'
+                            : 'You may leave this page at any time if you choose not to participate.'}
                     </p>
                 </div>
             </div>

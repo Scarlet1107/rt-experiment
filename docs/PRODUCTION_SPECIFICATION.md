@@ -254,7 +254,9 @@ const FEEDBACK_PROMPTS = {
 参加者情報:
 - 呼び名: {nickname}
 - 好きな褒め方: {preferredPraise}
-- 避けてほしい表現: {avoidExpressions}
+- 望む口調タイプ: {tonePreference}
+- 励まし方のスタイル: {motivationStyle}
+- 評価で重視したいポイント: {evaluationFocus}
 
 以下の状況に対応したフィードバックを各5パターン生成してください：
 [日本語プロンプト内容]
@@ -264,7 +266,9 @@ const FEEDBACK_PROMPTS = {
 Participant Information:
 - Preferred name: {nickname}
 - Preferred praise style: {preferredPraise}
-- Expressions to avoid: {avoidExpressions}
+- Preferred tone: {tonePreference}
+- Motivation style: {motivationStyle}
+- Evaluation focus: {evaluationFocus}
 
 Generate 5 feedback patterns for each of the following situations:
 [English prompt content]
@@ -281,7 +285,9 @@ async function generatePersonalizedFeedback(
   const prompt = FEEDBACK_PROMPTS[language]
     .replace('{nickname}', participantInfo.nickname)
     .replace('{preferredPraise}', participantInfo.preferredPraise)
-    .replace('{avoidExpressions}', participantInfo.avoidExpressions.join(', '));
+    .replace('{tonePreference}', participantInfo.tonePreference)
+    .replace('{motivationStyle}', participantInfo.motivationStyle)
+    .replace('{evaluationFocus}', participantInfo.evaluationFocus);
     
   const response = await openai.chat.completions.create({
     model: "gpt-5-nano",
@@ -319,6 +325,12 @@ async function generatePersonalizedFeedback(
     ↓
 実験完了・データ保存（選択言語）
 ```
+
+事前ヒアリングでは以下の設問を必須で取得する：
+- 口調・距離感タイプ（3択）
+- 励まし方のタイプ（3択）
+- 自己評価タイプ（3択）
+- 好きな褒められ方（複数選択可）
 
 #### 4.2.2 セッション2（次の日以降）
 ```
@@ -403,39 +415,87 @@ Keep up the good work!
 
 #### 6.3.1 事前生成パターン
 ```typescript
-type FeedbackPattern = {
-  rtImproved: string[];      // RT向上時
-  rtDeclined: string[];      // RT低下時
-  accuracyHigh: string[];    // 正答率高い時
-  accuracyLow: string[];     // 正答率低い時
-  perfectScore: string[];    // 全問正解時
-  consistent: string[];      // 安定している時
-  encouragement: string[];   // 一般的な励まし
-};
+type FeedbackScenarioKey =
+  | 'rt_short_acc_up_synergy'
+  | 'rt_slow_acc_down_fatigue'
+  | 'rt_short_acc_same'
+  | 'rt_short_acc_down'
+  | 'rt_short_acc_up'
+  | 'rt_slow_acc_up'
+  | 'rt_slow_acc_same'
+  | 'rt_slow_acc_down'
+  | 'rt_same_acc_up'
+  | 'rt_same_acc_down'
+  | 'rt_same_acc_same';
+
+type FeedbackPattern = Record<FeedbackScenarioKey, string[]>; // 各キーにつき3文
 ```
+
+11のシナリオは以下の通り（各3パターン生成）:
+1. RT短縮 & Accuracy大幅上昇（good synergy）
+2. RT遅延 & Accuracy大幅下降（fatigue sign）
+3. RT短縮 & Accuracy変化なし
+4. RT短縮 & Accuracy下降
+5. RT短縮 & Accuracy上昇（通常）
+6. RT遅延 & Accuracy上昇
+7. RT遅延 & Accuracy変化なし
+8. RT遅延 & Accuracy下降
+9. RT変化なし & Accuracy上昇
+10. RT変化なし & Accuracy下降
+11. RT変化なし & Accuracy変化なし（安定）
 
 #### 6.3.2 選択ロジック
 ```typescript
+const RT_CHANGE_THRESHOLD = 30;
+const RT_STRONG_THRESHOLD = 80;
+const ACC_CHANGE_THRESHOLD = 2;
+const ACC_STRONG_THRESHOLD = 5;
+
+function determineScenario(
+  current: BlockResult,
+  previous: BlockResult | null
+): FeedbackScenarioKey {
+  if (!previous) return 'rt_same_acc_same';
+
+  const rtDiff = current.averageRT - previous.averageRT;
+  const accDiff = current.accuracy - previous.accuracy;
+
+  const rtImproved = rtDiff <= -RT_CHANGE_THRESHOLD;
+  const rtStrongImproved = rtDiff <= -RT_STRONG_THRESHOLD;
+  const rtDeclined = rtDiff >= RT_CHANGE_THRESHOLD;
+  const rtStrongDeclined = rtDiff >= RT_STRONG_THRESHOLD;
+  const accUp = accDiff >= ACC_CHANGE_THRESHOLD;
+  const accStrongUp = accDiff >= ACC_STRONG_THRESHOLD;
+  const accDown = accDiff <= -ACC_CHANGE_THRESHOLD;
+  const accStrongDown = accDiff <= -ACC_STRONG_THRESHOLD;
+
+  if (rtStrongImproved && accStrongUp) return 'rt_short_acc_up_synergy';
+  if (rtStrongDeclined && accStrongDown) return 'rt_slow_acc_down_fatigue';
+
+  if (rtImproved) {
+    if (accUp) return 'rt_short_acc_up';
+    if (accDown) return 'rt_short_acc_down';
+    return 'rt_short_acc_same';
+  }
+
+  if (rtDeclined) {
+    if (accUp) return 'rt_slow_acc_up';
+    if (accDown) return 'rt_slow_acc_down';
+    return 'rt_slow_acc_same';
+  }
+
+  if (accUp) return 'rt_same_acc_up';
+  if (accDown) return 'rt_same_acc_down';
+  return 'rt_same_acc_same';
+}
+
 function selectFeedback(
-  currentBlock: BlockResult,
-  previousBlock: BlockResult | null,
-  patterns: FeedbackPattern,
-  userName: string
+  current: BlockResult,
+  previous: BlockResult | null,
+  patterns: FeedbackPattern
 ): string {
-  if (currentBlock.accuracy === 100) {
-    return randomSelect(patterns.perfectScore);
-  }
-  
-  if (previousBlock) {
-    if (currentBlock.averageRT < previousBlock.averageRT) {
-      return randomSelect(patterns.rtImproved);
-    }
-    if (currentBlock.accuracy > 85) {
-      return randomSelect(patterns.accuracyHigh);
-    }
-  }
-  
-  return randomSelect(patterns.encouragement);
+  const key = determineScenario(current, previous);
+  return randomSelect(patterns[key]);
 }
 ```
 
@@ -481,9 +541,16 @@ interface DataRecovery {
 ```sql
 CREATE TABLE participants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  nickname TEXT,
-  preferred_praise TEXT,
-  avoid_expressions TEXT[],
+  name TEXT NOT NULL,
+  student_id TEXT NOT NULL,
+  handedness TEXT CHECK (handedness IN ('right','left','other')) NOT NULL,
+  age INTEGER NOT NULL,
+  gender TEXT CHECK (gender IN ('male','female','other')) NOT NULL,
+  nickname TEXT NOT NULL,
+  preferred_praise TEXT NOT NULL,
+  tone_preference TEXT CHECK (tone_preference IN ('casual','gentle','formal')) NOT NULL,
+  motivation_style TEXT CHECK (motivation_style IN ('empathetic','cheerleader','advisor')) NOT NULL,
+  evaluation_focus TEXT CHECK (evaluation_focus IN ('self-progress','social-comparison','positive-focus')) NOT NULL,
   language TEXT CHECK (language IN ('ja', 'en')) DEFAULT 'ja',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -609,6 +676,24 @@ export const supabaseAdmin = createClient(
 ### 8.3 簡略化されたテーブル設計
 
 #### 8.3.1 participants テーブル（RLSなし）
+```sql
+CREATE TABLE participants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  student_id TEXT NOT NULL,
+  handedness TEXT CHECK (handedness IN ('right','left','other')) NOT NULL,
+  age INTEGER NOT NULL,
+  gender TEXT CHECK (gender IN ('male','female','other')) NOT NULL,
+  nickname TEXT NOT NULL,
+  preferred_praise TEXT NOT NULL,
+  tone_preference TEXT CHECK (tone_preference IN ('casual','gentle','formal')) NOT NULL,
+  motivation_style TEXT CHECK (motivation_style IN ('empathetic','cheerleader','advisor')) NOT NULL,
+  evaluation_focus TEXT CHECK (evaluation_focus IN ('self-progress','social-comparison','positive-focus')) NOT NULL,
+  language TEXT CHECK (language IN ('ja', 'en')) DEFAULT 'ja',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
 
 ## 9. OpenAI API統合
 
@@ -618,25 +703,28 @@ const FEEDBACK_GENERATION_PROMPT = `
 参加者情報:
 - 呼び名: {nickname}
 - 好きな褒め方: {preferredPraise}
-- 避けてほしい表現: {avoidExpressions}
+- 望む口調タイプ: {tonePreferenceDescription}
+- 励まし方のスタイル: {motivationStyleDescription}
+- 評価で重視したいポイント: {evaluationFocusDescription}
 
-以下の状況に対応したフィードバックを各5パターン生成してください：
-
-1. 反応時間が向上した場合
-2. 反応時間が低下した場合  
-3. 正答率が高い場合（85%以上）
-4. 正答率が低い場合（70%未満）
-5. 全問正解の場合
-6. 安定したパフォーマンスの場合
-7. 一般的な励ましの場合
+以下の11シナリオごとに15〜30文字のフィードバック文を3種類ずつ生成（キー名は必ず以下を使用）:
+1. "rt_short_acc_up_synergy": RT大幅短縮 & Accuracy大幅上昇
+2. "rt_slow_acc_down_fatigue": RT大幅遅延 & Accuracy大幅下降
+3. "rt_short_acc_same": RT短縮 & Accuracy変化なし
+4. "rt_short_acc_down": RT短縮 & Accuracy下降
+5. "rt_short_acc_up": RT短縮 & Accuracy上昇
+6. "rt_slow_acc_up": RT遅延 & Accuracy上昇
+7. "rt_slow_acc_same": RT遅延 & Accuracy変化なし
+8. "rt_slow_acc_down": RT遅延 & Accuracy下降
+9. "rt_same_acc_up": RT同じ & Accuracy上昇
+10. "rt_same_acc_down": RT同じ & Accuracy下降
+11. "rt_same_acc_same": RTもAccuracyも変化なし
 
 制約:
-- 具体的な数値は含めない
-- 15から30文字程度
-- 参加者の呼び名を適度に含める(半分程度)
-- ポジティブで励ましの内容
-- ネガティブな表現は避ける
-- 参加者の避けたい表現は使用しない
+- 数値は書かない
+- 呼び名を適度に含める（約半分）
+- {tonePreferenceDescription}・{motivationStyleDescription}・{evaluationFocusDescription} を反映
+- ポジティブで励まし中心、ネガティブ表現は避ける
 
 JSON形式で出力してください。
 `;
@@ -665,6 +753,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 OPENAI_API_KEY=
 ADMIN_USERNAME=
 ADMIN_PASSWORD=
+NEXT_PUBLIC_FEEDBACK_TIMEOUT_SECONDS=
 ```
 
 ### 10.3 新規パッケージ

@@ -1,20 +1,21 @@
 import { selectFeedback } from '../../app/api/generate-feedback/route';
+import type {
+  TonePreference,
+  MotivationStyle,
+  EvaluationFocus,
+  FeedbackPattern
+} from '@/types';
+
+export type { FeedbackPattern };
 
 export interface ParticipantInfo {
+  id?: string;
   nickname: string;
   preferredPraise: string;
-  avoidExpressions: string[];
+  tonePreference: TonePreference;
+  motivationStyle: MotivationStyle;
+  evaluationFocus: EvaluationFocus;
   language: 'ja' | 'en';
-}
-
-export interface FeedbackPattern {
-  rtImproved: string[];
-  rtDeclined: string[];
-  accuracyHigh: string[];
-  accuracyLow: string[];
-  perfectScore: string[];
-  consistent: string[];
-  encouragement: string[];
 }
 
 export interface BlockPerformance {
@@ -133,110 +134,122 @@ function saveFeedbackPatternsToCache(nickname: string, patterns: FeedbackPattern
 /**
  * デフォルトフィードバックパターン（API失敗時のフォールバック）
  */
-function getDefaultFeedbackPatterns(language: 'ja' | 'en'): FeedbackPattern {
+export function getDefaultFeedbackPatterns(language: 'ja' | 'en'): FeedbackPattern {
   if (language === 'ja') {
     return {
-      rtImproved: [
-        "前より速くなってるね！",
-        "反応が良くなってる！",
-        "スピードアップしてる！",
-        "テンポ良くなったね！",
-        "反応時間が改善してる！"
+      rt_short_acc_up_synergy: [
+        "RTも正確さも大幅アップ！理想の波に乗ってるよ。",
+        "速さとAccuracyが同時に跳ね上がって最高の状態！",
+        "スピードと精度の両方が噛み合っていて素晴らしい！"
       ],
-      rtDeclined: [
-        "落ち着いて取り組もう",
-        "正確性を重視して",
-        "焦らずにいこう",
-        "丁寧にやってみて",
-        "一つずつ確実に"
+      rt_slow_acc_down_fatigue: [
+        "少し疲れが出てるかも。深呼吸して気持ちを切り替えよう。",
+        "RTもAccuracyも下がったので、短い休憩でリセットしよう。",
+        "集中が途切れているサイン。姿勢を整えて整え直そう。"
       ],
-      accuracyHigh: [
-        "すごく正確だね！",
-        "ほとんど正解してる！",
-        "集中できてるみたい！",
-        "とても良い正答率！",
-        "正確性が素晴らしい！"
+      rt_short_acc_same: [
+        "反応が速くなっているよ！このテンポで正確さも保とう。",
+        "スピードは伸びているので、丁寧さを意識すれば完璧。",
+        "テンポが良くなっているから、その調子で正答率もキープしよう。"
       ],
-      accuracyLow: [
-        "次はもう少し慎重に",
-        "落ち着いて判断しよう",
-        "集中して取り組もう",
-        "正確性を意識して",
-        "ゆっくりでも確実に"
+      rt_short_acc_down: [
+        "速さは十分なので、落ち着いてミスを減らしてみよう。",
+        "テンポが上がった分だけ慎重さをプラスしていこう。",
+        "スピードは噛み合っているから、判断を丁寧に戻せば大丈夫。"
       ],
-      perfectScore: [
-        "パーフェクト！素晴らしい！",
-        "全問正解！すごい！",
-        "完璧な成績だね！",
-        "100点！お見事！",
-        "全て正解！最高！"
+      rt_short_acc_up: [
+        "速さも正確さも着実に伸びていて素晴らしい！",
+        "テンポ良く正解できているので、この流れを続けよう。",
+        "スピードもAccuracyもアップ中。とても良いコンディションだよ。"
       ],
-      consistent: [
-        "安定したペースだね",
-        "一定のリズムで進んでる",
-        "ブレずに続けられてる",
-        "安定感があるね",
-        "コンスタントに頑張ってる"
+      rt_slow_acc_up: [
+        "慎重さがAccuracyの向上につながっているよ。",
+        "丁寧に取り組んだ結果、正答率が改善しているね。",
+        "ペースを落とした分だけミスが減っていて良い判断だよ。"
       ],
-      encouragement: [
-        "この調子で頑張って！",
-        "よく集中できてるね",
-        "順調に進んでる！",
-        "いい感じだよ！",
-        "継続して頑張ろう！"
-      ]
-    };
-  } else {
-    return {
-      rtImproved: [
-        "You're getting faster!",
-        "Great reaction time improvement!",
-        "Speed is picking up!",
-        "Nice tempo improvement!",
-        "Response time is getting better!"
+      rt_slow_acc_same: [
+        "正確さは保てているから、次はスピードを少し戻してみよう。",
+        "落ち着いたリズムで進められているので、テンポ調整だけ意識しよう。",
+        "慎重モードで安定しているね。呼吸を整えてスピードも取り戻そう。"
       ],
-      rtDeclined: [
-        "Take your time and stay calm",
-        "Focus on accuracy",
-        "No rush, stay steady",
-        "Careful and precise",
-        "One step at a time"
+      rt_slow_acc_down: [
+        "ペースが落ちてミスも増えているので、軽くリフレッシュしよう。",
+        "一度肩の力を抜いて、リズムと正確さを同時に整え直そう。",
+        "集中が切れているサイン。短い休憩や姿勢の調整がおすすめ。"
       ],
-      accuracyHigh: [
-        "Excellent accuracy!",
-        "Almost all correct!",
-        "Great focus!",
-        "Very good accuracy rate!",
-        "Impressive precision!"
+      rt_same_acc_up: [
+        "安定したリズムのまま正確さが上がっていて頼もしい！",
+        "ペースはそのまま、ミスが減っていてとても良い流れ。",
+        "リズムを崩さずにAccuracyが向上しているよ。"
       ],
-      accuracyLow: [
-        "A bit more careful next time",
-        "Take time to think",
-        "Stay focused",
-        "Accuracy over speed",
-        "Slow and steady wins"
+      rt_same_acc_down: [
+        "テンポは安定しているから、視線と判断を丁寧に戻そう。",
+        "リズムはいいので、答える前に1拍置いてミスを減らそう。",
+        "スピードは保てているので、集中だけもう一度整えよう。"
       ],
-      perfectScore: [
-        "Perfect! Amazing!",
-        "All correct! Fantastic!",
-        "Flawless performance!",
-        "100%! Excellent!",
-        "Perfect score! Outstanding!"
-      ],
-      consistent: [
-        "Steady pace, well done",
-        "Consistent rhythm",
-        "Stable performance",
-        "Good consistency",
-        "Maintaining good pace"
-      ],
-      encouragement: [
-        "Keep up the good work!",
-        "Great concentration!",
-        "Going well!",
-        "Nice job!",
-        "Stay focused and continue!"
+      rt_same_acc_same: [
+        "安定したパフォーマンスが続いているよ。",
+        "大きな変動なく続けられているので、この土台を活かそう。",
+        "落ち着いた状態をキープできているね。リズムを信じていこう。"
       ]
     };
   }
+
+  return {
+    rt_short_acc_up_synergy: [
+      "Huge boost in both speed and accuracy—perfect synergy!",
+      "RT and accuracy jumped together, this is the sweet spot!",
+      "Fast and precise at the same time. Stellar performance!"
+    ],
+    rt_slow_acc_down_fatigue: [
+      "Looks like fatigue. Take a breath and reset your focus.",
+      "Both speed and accuracy dipped, so consider a quick pause.",
+      "Signs of tiredness—reset your posture and regroup."
+    ],
+    rt_short_acc_same: [
+      "You’re reacting faster! Keep that pace while holding accuracy.",
+      "Speed improved, so just keep the same calm precision.",
+      "Tempo is up, now maintain the same steady accuracy."
+    ],
+    rt_short_acc_down: [
+      "Speed is great, now slow the mind slightly to reduce slips.",
+      "Quick reactions achieved—add a touch of calm for accuracy.",
+      "You’ve got the tempo, just tighten decisions for fewer errors."
+    ],
+    rt_short_acc_up: [
+      "Speed and accuracy are both trending up—fantastic run!",
+      "Quick and precise responses—stay with this rhythm.",
+      "RT and accuracy improving together. Keep pushing!"
+    ],
+    rt_slow_acc_up: [
+      "Taking your time paid off with cleaner answers.",
+      "Accuracy improved as you slowed down; now ease the pace back up.",
+      "Being deliberate raised your precision. Great adjustment."
+    ],
+    rt_slow_acc_same: [
+      "Accuracy held steady; gently nudge the pace up again.",
+      "Calm rhythm maintained—now reintroduce a bit more speed.",
+      "Careful approach is stable. Add a touch of tempo when ready."
+    ],
+    rt_slow_acc_down: [
+      "Slower and less accurate—shake it off with a short reset.",
+      "Both metrics dipped, so reset your focus and posture.",
+      "Energy dropped; take a quick break to realign speed and precision."
+    ],
+    rt_same_acc_up: [
+      "Steady pace with rising accuracy—awesome consistency!",
+      "Same rhythm, fewer errors. That’s reliable progress.",
+      "Accuracy climbed without changing tempo—keep that groove."
+    ],
+    rt_same_acc_down: [
+      "Pace is steady, so double-check before responding to reduce slips.",
+      "Hold the rhythm but add a breath before answering.",
+      "Speed is there; channel more focus into each decision."
+    ],
+    rt_same_acc_same: [
+      "Stable run. Keep trusting this baseline.",
+      "No big swings—use this calm state as a launchpad.",
+      "Consistency maintained. When you’re ready, push gently forward."
+    ]
+  };
 }

@@ -1,5 +1,13 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Experiment, BlockResult, Trial, StoredExperimentData } from '../../types';
+import {
+    Experiment,
+    BlockResult,
+    Trial,
+    StoredExperimentData,
+    TonePreference,
+    MotivationStyle,
+    EvaluationFocus,
+} from '../../types';
 
 // IndexedDBのスキーマ定義
 interface ExperimentDB extends DBSchema {
@@ -23,7 +31,9 @@ interface ExperimentDB extends DBSchema {
             gender: string;
             nickname: string;
             preferredPraise: string;
-            avoidExpressions: string[];
+            tonePreference: TonePreference;
+            motivationStyle: MotivationStyle;
+            evaluationFocus: EvaluationFocus;
             language: string;
             createdAt: Date;
         };
@@ -192,7 +202,9 @@ export async function saveParticipant(participant: {
     gender: string;
     nickname: string;
     preferredPraise: string;
-    avoidExpressions: string[];
+    tonePreference: TonePreference;
+    motivationStyle: MotivationStyle;
+    evaluationFocus: EvaluationFocus;
     language: string;
     createdAt: Date;
 }): Promise<void> {

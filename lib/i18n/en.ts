@@ -15,13 +15,12 @@ export const en: Translations = {
 
 Your participation is completely voluntary and you may withdraw at any time.
 
-The collected data will be:
-• Completely anonymized
-• Used only for academic research
-• Cannot identify individuals  
-• AI (OpenAI API) will be used to generate feedback, but data will not be used for training
+The collected data will:
+• Be used only for research
+• Never be shared in a way that identifies individuals
+• Use AI (OpenAI API) to create feedback, but not for training
 
-Duration: Approximately 15 minutes (including practice)
+Duration: Approximately 20 minutes (including practice)
 Content: You will perform tasks judging the color of displayed text`,
         agree: "I agree to participate",
         disagree: "I do not wish to participate"
@@ -32,10 +31,16 @@ Content: You will perform tasks judging the color of displayed text`,
         subtitle: "Please answer a few questions for personalized feedback",
         nickname: "Preferred name (nickname)",
         nicknamePlaceholder: "e.g., Alex, Sam, etc.",
+        nicknameHelper: "This name will appear inside feedback messages.",
         preferredPraise: "Preferred praise/encouragement style",
+        preferredPraiseHint: "Select as many styles as you like.",
         preferredPraisePlaceholder: "e.g., Great job!, You're doing well!",
-        avoidExpressions: "Expressions to avoid (comma-separated)",
-        avoidExpressionsPlaceholder: "e.g., bad, slow, poor",
+        toneQuestionTitle: "What tone keeps you motivated during the experiment?",
+        toneQuestionDescription: "Pick the option that fits you best.",
+        motivationQuestionTitle: "How would you like to be encouraged when it’s tough?",
+        motivationQuestionDescription: "Choose one encouragement style.",
+        evaluationQuestionTitle: "What kind of evaluation motivates you?",
+        evaluationQuestionDescription: "Select the feedback focus you prefer.",
         continue: "Continue"
     },
 
@@ -72,8 +77,7 @@ Press the corresponding key for the displayed text color as quickly and accurate
         incorrect: "Incorrect",
         break: "Break",
         breakMessage: "Great job! Please take a short break. When ready, proceed to the next block.",
-        continue: "Next Block",
-        escToExit: "Press ESC to exit the experiment"
+        continue: "Next Block"
     },
 
     feedback: {

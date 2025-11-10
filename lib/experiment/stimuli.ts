@@ -1,3 +1,4 @@
+import { experimentConfig } from '@/lib/config/experiment';
 import { StroopStimulus, Color } from '../../types';
 
 // 使用する無意味語（15語固定）
@@ -19,16 +20,7 @@ function shuffleArray<T>(array: T[]): T[] {
     return shuffled;
 }
 
-/**
- * 完全にバランスされた60試行の刺激セットを生成
- * 
- * 構成:
- * - レッド回答: 15試行 (赤色文字5, 青色文字5, 緑色文字5)
- * - ブルー回答: 15試行 (赤色文字5, 青色文字5, 緑色文字5)
- * - グリーン回答: 15試行 (赤色文字5, 青色文字5, 緑色文字5)
- * - アザー回答: 15試行 (赤色文字5, 青色文字5, 緑色文字5)
- */
-export function generateBlockStimuli(): StroopStimulus[] {
+function buildBaseStimuliSet(): StroopStimulus[] {
     const stimuli: StroopStimulus[] = [];
 
     // 色単語刺激（45試行：各色15試行ずつ）
@@ -58,8 +50,32 @@ export function generateBlockStimuli(): StroopStimulus[] {
             category: 'NONSENSE'
         });
     });
+    return stimuli;
+}
 
-    // ランダムに並び替え（ブロックごとに異なる順序）
+/**
+ * ブロック分の刺激セットを生成
+ * 
+ * デフォルトは実験設定の試行数（従来は60試行）。設定値が60を超える場合は
+ * バランスの取れた60試行のセットを繰り返し、余り分はランダムサンプルで補う。
+ */
+export function generateBlockStimuli(targetCount = experimentConfig.trialsPerBlock): StroopStimulus[] {
+    if (targetCount <= 0) return [];
+
+    const baseStimuli = buildBaseStimuliSet();
+    const fullSets = Math.floor(targetCount / baseStimuli.length);
+    const remainder = targetCount % baseStimuli.length;
+
+    const stimuli: StroopStimulus[] = [];
+
+    for (let i = 0; i < fullSets; i++) {
+        stimuli.push(...shuffleArray(baseStimuli));
+    }
+
+    if (remainder > 0) {
+        stimuli.push(...shuffleArray(baseStimuli).slice(0, remainder));
+    }
+
     return shuffleArray(stimuli);
 }
 
@@ -106,27 +122,27 @@ export function getStimuliStats(stimuli: StroopStimulus[]) {
 export function validateStimuliSet(stimuli: StroopStimulus[]): boolean {
     const stats = getStimuliStats(stimuli);
 
-    // 総数チェック
-    if (stats.total !== 60) return false;
+    if (stats.total !== experimentConfig.trialsPerBlock) {
+        return false;
+    }
 
-    // 回答カテゴリ別の数チェック
-    if (stats.byCorrectAnswer.RED !== 15) return false;
-    if (stats.byCorrectAnswer.BLUE !== 15) return false;
-    if (stats.byCorrectAnswer.GREEN !== 15) return false;
-    if (stats.byCorrectAnswer.OTHER !== 15) return false;
+    // 従来仕様（60試行）のみ細かなバランスチェックを行う
+    if (experimentConfig.trialsPerBlock === 60) {
+        if (stats.byCorrectAnswer.RED !== 15) return false;
+        if (stats.byCorrectAnswer.BLUE !== 15) return false;
+        if (stats.byCorrectAnswer.GREEN !== 15) return false;
+        if (stats.byCorrectAnswer.OTHER !== 15) return false;
 
-    // 文字色別の数チェック
-    if (stats.byInkColor.RED !== 20) return false;
-    if (stats.byInkColor.BLUE !== 20) return false;
-    if (stats.byInkColor.GREEN !== 20) return false;
+        if (stats.byInkColor.RED !== 20) return false;
+        if (stats.byInkColor.BLUE !== 20) return false;
+        if (stats.byInkColor.GREEN !== 20) return false;
 
-    // カテゴリ別の数チェック
-    if (stats.byCategory.COLOR_WORD !== 45) return false;
-    if (stats.byCategory.NONSENSE !== 15) return false;
+        if (stats.byCategory.COLOR_WORD !== 45) return false;
+        if (stats.byCategory.NONSENSE !== 15) return false;
 
-    // 一致/不一致の数チェック
-    if (stats.congruent !== 15) return false; // 3色 × 5試行
-    if (stats.incongruent !== 45) return false;
+        if (stats.congruent !== 15) return false;
+        if (stats.incongruent !== 45) return false;
+    }
 
     return true;
 }
