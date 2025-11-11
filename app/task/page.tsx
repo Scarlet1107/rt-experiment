@@ -140,11 +140,6 @@ export default function StroopTaskPage() {
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        router.push("/");
-        return;
-      }
-
       if (event.repeat) {
         return;
       }
@@ -284,14 +279,14 @@ export default function StroopTaskPage() {
           </div>
 
           <p className="text-sm text-zinc-600">
-            スタート後はESCキーで離脱できます。キーを押しっぱなしにしても反応は1回だけ記録されます。
+            キーを押しっぱなしにしても反応は1回だけ記録されます。
           </p>
 
           <div className="flex justify-center">
             <button
               type="button"
               onClick={handleStart}
-              className="inline-flex items-center justify-center rounded-full bg-[#1e88e5] px-8 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-[#1565c0] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1e88e5]"
+              className="inline-flex items-center justify-center rounded-full bg-[#1e88e5] px-8 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-[#1565c0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1e88e5]"
             >
               課題を開始
             </button>
@@ -338,7 +333,7 @@ export default function StroopTaskPage() {
                 <p className="font-semibold text-gray-400">blue</p>
               </div>
             </div>
-            <p className="text-xs text-zinc-500">ESCで離脱できます</p>
+            <p className="text-xs text-zinc-500">各キー入力は1回のみ判定されます</p>
           </div>
         </section>
       )}
@@ -397,14 +392,14 @@ export default function StroopTaskPage() {
             <button
               type="button"
               onClick={handleStart}
-              className="inline-flex items-center justify-center rounded-full bg-[#1e88e5] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1565c0] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1e88e5]"
+              className="inline-flex items-center justify-center rounded-full bg-[#1e88e5] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1565c0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1e88e5]"
             >
               もう一度実施
             </button>
             <button
               type="button"
               onClick={() => router.push("/")}
-              className="inline-flex items-center justify-center rounded-full border border-zinc-300 px-6 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400"
+              className="inline-flex items-center justify-center rounded-full border border-zinc-300 px-6 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400"
             >
               説明に戻る
             </button>
