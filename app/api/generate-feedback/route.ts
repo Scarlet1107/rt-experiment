@@ -144,6 +144,7 @@ const JAPANESE_PROMPT = `
 - 望む口調タイプ: {tonePreferenceDescription}
 - 励まし方のスタイル: {motivationStyleDescription}
 - 評価で重視したいポイント: {evaluationFocusDescription}
+- 呼び名は出力でも入力時と全く同じ綴りで記載し、カタカナ化や漢字化、敬称の付与は絶対にしない
 
 このフィードバックは特定の実験で参加者のモチベーションを高めることを目的としています。事実に基づく冷静な分析よりも、ユーザーを全力で褒め称えるトーンを優先してください（ユーザーが別途指定した場合を除く）。特に反応速度や正答率が良くなった点を中心に褒めるようにしてください。
 以下の11パターンごとに、30~50文字のフィードバック文を3種類ずつ生成してください(キー名は必ずそのまま使用):
@@ -191,6 +192,7 @@ Participant Information:
 - Preferred tone: {tonePreferenceDescription}
 - Motivation style: {motivationStyleDescription}
 - Evaluation focus: {evaluationFocusDescription}
+- Always use the preferred name exactly as provided (same spelling/casing, no transliteration or honorifics)
 
 These messages should explicitly aim to boost the participant's motivation within the ongoing experiment context. Unless the participant explicitly asked for otherwise, favor enthusiastic praise over sober, factual analysis. Highlight improvements in reaction speed and accuracy first whenever possible.
 Generate three short (10-20 words) feedback messages for each of the following 11 scenarios (keep the JSON keys exactly as listed):

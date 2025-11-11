@@ -6,12 +6,23 @@ import { LanguageProvider, useLanguage } from '../../../lib/i18n';
 import { saveParticipant, saveParticipantToSupabase, getParticipantFromSupabase } from '../../../lib/storage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { User, GraduationCap, Hand, Calendar, Users, MessageCircle } from 'lucide-react';
+import { User, GraduationCap, Hand, Calendar, Users, MessageCircle, RotateCcw } from 'lucide-react';
 import type { TonePreference, MotivationStyle, EvaluationFocus, ParticipantRow } from '@/types';
 
 interface SurveyFormData {
@@ -29,6 +40,19 @@ interface SurveyFormData {
     motivationStyle: MotivationStyle | '';
     evaluationFocus: EvaluationFocus | '';
 }
+
+const createEmptyFormData = (): SurveyFormData => ({
+    name: '',
+    studentId: '',
+    handedness: '',
+    age: '',
+    gender: '',
+    nickname: '',
+    preferredPraise: [],
+    tonePreference: '',
+    motivationStyle: '',
+    evaluationFocus: '',
+});
 
 // 褒め方の選択肢
 const PRAISE_OPTIONS = {
@@ -171,18 +195,7 @@ function SurveyContent({ uuid }: SurveyContentProps) {
     const searchParams = useSearchParams();
     const condition = (searchParams.get('condition') as 'static' | 'personalized') || 'static';
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [formData, setFormData] = useState<SurveyFormData>({
-        name: '',
-        studentId: '',
-        handedness: '',
-        age: '',
-        gender: '',
-        nickname: '',
-        preferredPraise: [],
-        tonePreference: '',
-        motivationStyle: '',
-        evaluationFocus: '',
-    });
+    const [formData, setFormData] = useState<SurveyFormData>(() => createEmptyFormData());
 
     const [errors, setErrors] = useState<Partial<Record<keyof SurveyFormData, string>>>({});
     const [existingParticipant, setExistingParticipant] = useState<ParticipantRow | null>(null);
@@ -234,7 +247,13 @@ function SurveyContent({ uuid }: SurveyContentProps) {
         personalizationSubtitle: language === 'ja'
             ? '実験中に表示されるフィードバックをあなた好みにカスタマイズします'
             : 'Customize how feedback sounds during the experiment.',
-        clearLabel: language === 'ja' ? 'クリア' : 'Clear',
+        clearButtonLabel: language === 'ja' ? '入力内容をクリア' : 'Clear form',
+        clearDialogTitle: language === 'ja' ? 'フォームを初期化しますか？' : 'Reset the form?',
+        clearDialogDescription: language === 'ja'
+            ? 'フォームに入力したすべての項目を初期化する'
+            : 'This will clear every field you have filled out.',
+        clearDialogConfirm: language === 'ja' ? '初期化する' : 'Reset now',
+        clearDialogCancel: language === 'ja' ? 'キャンセル' : 'Cancel',
         requiredFootnote: language === 'ja' ? '* 必須項目' : '* Required field',
         privacyFootnote: language === 'ja'
             ? 'この情報は研究目的にのみ使用され、個人情報は厳格に保護されます'
@@ -373,6 +392,11 @@ function SurveyContent({ uuid }: SurveyContentProps) {
         router.push(`/instructions/${uuid}?condition=${condition}`);
     };
 
+    const handleResetForm = () => {
+        setFormData(createEmptyFormData());
+        setErrors({});
+    };
+
     const handleInputChange = (field: keyof SurveyFormData, value: string | string[]) => {
         setFormData(prev => ({ ...prev, [field]: value }));
         // エラーをクリア
@@ -487,7 +511,35 @@ function SurveyContent({ uuid }: SurveyContentProps) {
         <main className="min-h-screen bg-background flex items-center justify-center px-6 py-12">
             <div className="max-w-4xl w-full space-y-8">
                 <Card>
-                    <CardHeader className="text-center">
+                    <CardHeader className="text-center relative">
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={isSubmitting}
+                                    className="absolute right-4 top-4 h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                                >
+                                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                                    {surveyCopy.clearButtonLabel}
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>{surveyCopy.clearDialogTitle}</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        {surveyCopy.clearDialogDescription}
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>{surveyCopy.clearDialogCancel}</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleResetForm}>
+                                        {surveyCopy.clearDialogConfirm}
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
                         <CardTitle className="text-3xl">{t.survey.title}</CardTitle>
                         <CardDescription className="text-lg">
                             {t.survey.subtitle}
@@ -510,27 +562,14 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                     {/* 名前 */}
                                     <div className="space-y-2">
                                         <Label htmlFor="name">{surveyCopy.nameLabel}</Label>
-                                        <div className="relative">
-                                            <Input
-                                                id="name"
-                                                value={formData.name}
-                                                onChange={(e) => handleInputChange('name', e.target.value)}
-                                                placeholder={surveyCopy.namePlaceholder}
-                                                disabled={isSubmitting}
-                                                className={`pr-16 ${errors.name ? 'border-red-500' : ''}`}
-                                            />
-                                            {formData.name && (
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="absolute right-1 top-1 h-7 text-xs"
-                                                    onClick={() => handleInputChange('name', '')}
-                                                >
-                                                    {surveyCopy.clearLabel}
-                                                </Button>
-                                            )}
-                                        </div>
+                                        <Input
+                                            id="name"
+                                            value={formData.name}
+                                            onChange={(e) => handleInputChange('name', e.target.value)}
+                                            placeholder={surveyCopy.namePlaceholder}
+                                            disabled={isSubmitting}
+                                            className={errors.name ? 'border-red-500' : ''}
+                                        />
                                         {errors.name && (
                                             <p className="text-sm text-red-600">{errors.name}</p>
                                         )}
@@ -542,27 +581,14 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                             <GraduationCap className="mr-1 h-4 w-4" />
                                             {surveyCopy.studentIdLabel}
                                         </Label>
-                                        <div className="relative">
-                                            <Input
-                                                id="studentId"
-                                                value={formData.studentId}
-                                                onChange={(e) => handleInputChange('studentId', e.target.value)}
-                                                placeholder={surveyCopy.studentIdPlaceholder}
-                                                disabled={isSubmitting}
-                                                className={`pr-16 ${errors.studentId ? 'border-red-500' : ''}`}
-                                            />
-                                            {formData.studentId && (
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="absolute right-1 top-1 h-7 text-xs"
-                                                    onClick={() => handleInputChange('studentId', '')}
-                                                >
-                                                    {surveyCopy.clearLabel}
-                                                </Button>
-                                            )}
-                                        </div>
+                                        <Input
+                                            id="studentId"
+                                            value={formData.studentId}
+                                            onChange={(e) => handleInputChange('studentId', e.target.value)}
+                                            placeholder={surveyCopy.studentIdPlaceholder}
+                                            disabled={isSubmitting}
+                                            className={errors.studentId ? 'border-red-500' : ''}
+                                        />
                                         {errors.studentId && (
                                             <p className="text-sm text-red-600">{errors.studentId}</p>
                                         )}
@@ -600,38 +626,25 @@ function SurveyContent({ uuid }: SurveyContentProps) {
 
                                         {/* 年齢 */}
                                         <div className="space-y-2">
-                                            <Label htmlFor="age" className="flex items-center">
-                                                <Calendar className="mr-1 h-4 w-4" />
-                                                {surveyCopy.ageLabel}
-                                            </Label>
-                                            <div className="relative">
-                                                <Input
-                                                    id="age"
-                                                    type="number"
-                                                    min="1"
-                                                    max="150"
-                                                    value={formData.age}
-                                                    onChange={(e) => handleInputChange('age', e.target.value)}
-                                                    placeholder={surveyCopy.agePlaceholder}
-                                                    disabled={isSubmitting}
-                                                    className={`pr-16 ${errors.age ? 'border-red-500' : ''}`}
-                                                />
-                                                {formData.age && (
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="absolute right-1 top-1 h-7 text-xs"
-                                                        onClick={() => handleInputChange('age', '')}
-                                                    >
-                                                        {surveyCopy.clearLabel}
-                                                    </Button>
-                                                )}
-                                            </div>
-                                            {errors.age && (
-                                                <p className="text-sm text-red-600">{errors.age}</p>
-                                            )}
-                                        </div>
+                                        <Label htmlFor="age" className="flex items-center">
+                                            <Calendar className="mr-1 h-4 w-4" />
+                                            {surveyCopy.ageLabel}
+                                        </Label>
+                                        <Input
+                                            id="age"
+                                            type="number"
+                                            min="1"
+                                            max="150"
+                                            value={formData.age}
+                                            onChange={(e) => handleInputChange('age', e.target.value)}
+                                            placeholder={surveyCopy.agePlaceholder}
+                                            disabled={isSubmitting}
+                                            className={errors.age ? 'border-red-500' : ''}
+                                        />
+                                        {errors.age && (
+                                            <p className="text-sm text-red-600">{errors.age}</p>
+                                        )}
+                                    </div>
                                     </div>
 
                                     {/* 性別 */}
@@ -685,27 +698,14 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                     {/* ニックネーム */}
                                     <div className="space-y-2">
                                         <Label htmlFor="nickname">{t.survey.nickname} *</Label>
-                                        <div className="relative">
-                                            <Input
-                                                id="nickname"
-                                                value={formData.nickname}
-                                                onChange={(e) => handleInputChange('nickname', e.target.value)}
-                                                placeholder={t.survey.nicknamePlaceholder}
-                                                disabled={isSubmitting}
-                                                className={`pr-16 ${errors.nickname ? 'border-red-500' : ''}`}
-                                            />
-                                            {formData.nickname && (
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="absolute right-1 top-1 h-7 text-xs"
-                                                    onClick={() => handleInputChange('nickname', '')}
-                                                >
-                                                    {surveyCopy.clearLabel}
-                                                </Button>
-                                            )}
-                                        </div>
+                                        <Input
+                                            id="nickname"
+                                            value={formData.nickname}
+                                            onChange={(e) => handleInputChange('nickname', e.target.value)}
+                                            placeholder={t.survey.nicknamePlaceholder}
+                                            disabled={isSubmitting}
+                                            className={errors.nickname ? 'border-red-500' : ''}
+                                        />
                                         <p className="text-xs text-muted-foreground">
                                             {t.survey.nicknameHelper}
                                         </p>

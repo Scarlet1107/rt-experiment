@@ -7,6 +7,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye } from 'lucide-react';
 import type { TonePreference, MotivationStyle, EvaluationFocus } from '@/types';
 import { experimentConfig } from '@/lib/config/experiment';
@@ -61,6 +73,7 @@ interface ApiParticipant {
 interface ParticipantSummary {
     id: string;
     nickname: string | null;
+    displayName: string | null;
     language: string | null;
     createdAt: Date;
     updatedAt: Date;
@@ -82,6 +95,10 @@ interface ParticipantSummary {
         tonePreference: TonePreference | null;
         motivationStyle: MotivationStyle | null;
         evaluationFocus: EvaluationFocus | null;
+    };
+    conditionCompletion: {
+        static: boolean;
+        personalized: boolean;
     };
 }
 
@@ -167,6 +184,7 @@ function transformParticipant(participant: ApiParticipant): ParticipantSummary {
     return {
         id: participant.id,
         nickname: participant.nickname,
+        displayName: participant.name,
         language: participant.language,
         createdAt: new Date(participant.created_at),
         updatedAt: new Date(participant.updated_at),
@@ -179,6 +197,10 @@ function transformParticipant(participant: ApiParticipant): ParticipantSummary {
         lastUpdate: lastActivity,
         profileCompleted,
         profile,
+        conditionCompletion: {
+            static: hasStaticCompleted,
+            personalized: hasPersonalizedCompleted,
+        },
     };
 }
 
@@ -214,6 +236,94 @@ function InviteLinkRow({ label, url }: InviteLinkProps) {
                 </Button>
             </div>
         </div>
+    );
+}
+
+interface DeleteParticipantButtonProps {
+    participantId: string;
+    participantLabel: string;
+    onConfirm: (participantId: string) => Promise<void>;
+    disabled?: boolean;
+}
+
+function DeleteParticipantButton({
+    participantId,
+    participantLabel,
+    onConfirm,
+    disabled,
+}: DeleteParticipantButtonProps) {
+    const [open, setOpen] = useState(false);
+    const [confirmation, setConfirmation] = useState('');
+    const isReady = confirmation.trim() === '削除';
+
+    const handleDialogChange = (nextOpen: boolean) => {
+        if (disabled) return;
+        setOpen(nextOpen);
+        if (!nextOpen) {
+            setConfirmation('');
+        }
+    };
+
+    const handleConfirm = async () => {
+        if (!isReady) return;
+        await onConfirm(participantId);
+        setConfirmation('');
+        setOpen(false);
+    };
+
+    return (
+        <AlertDialog open={open} onOpenChange={handleDialogChange}>
+            <AlertDialogTrigger asChild>
+                <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={disabled}
+                >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    {disabled ? '削除中' : '削除'}
+                </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>参加者を削除しますか？</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {participantLabel} のデータは完全に削除され、元に戻すことはできません。続行するには「削除」と入力してください。
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="space-y-2">
+                    <Input
+                        value={confirmation}
+                        onChange={(event) => setConfirmation(event.target.value)}
+                        placeholder="削除"
+                        autoFocus
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        この操作は元に戻せません。
+                    </p>
+                </div>
+                <AlertDialogFooter>
+                    <AlertDialogCancel disabled={disabled}>キャンセル</AlertDialogCancel>
+                    <AlertDialogAction asChild disabled={!isReady || disabled}>
+                        <Button variant="destructive" onClick={handleConfirm} disabled={!isReady || disabled}>
+                            {disabled ? '削除中' : '削除を確定'}
+                        </Button>
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
+function ConditionStatusPill({ label, done }: { label: string; done: boolean }) {
+    return (
+        <span
+            className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${done
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-slate-200 text-slate-500'
+                }`}
+        >
+            {label}: {done ? '完' : '未'}
+        </span>
     );
 }
 
@@ -307,9 +417,6 @@ export default function AdminDashboard() {
     };
 
     const handleDeleteParticipant = async (participantId: string) => {
-        const confirmed = window.confirm('選択した参加者を削除しますか？この操作は元に戻せません。');
-        if (!confirmed) return;
-
         try {
             setDeletingId(participantId);
             const response = await fetch(`/api/admin/participants/${participantId}`, { method: 'DELETE' });
@@ -498,42 +605,33 @@ export default function AdminDashboard() {
                                         {participants.map((participant) => (
                                             <TableRow key={participant.id}>
                                                 <TableCell>
-                                                    <div>
-                                                        <div className="font-medium">
-                                                            {participant.id.slice(0, 8)}...
+                                                    <div className="space-y-1">
+                                                        <div className="text-base font-semibold">
+                                                            {participant.displayName || '氏名未登録'}
                                                         </div>
-                                                        <div className="text-sm text-muted-foreground">
-                                                            {participant.nickname || '未登録'}
-                                                            {!participant.profileCompleted && (
-                                                                <Badge variant="outline" className="ml-2 text-[10px]">
-                                                                    プロフィール未入力
-                                                                </Badge>
-                                                            )}
+                                                        <div className="text-xs text-muted-foreground flex flex-wrap gap-2">
+                                                            <span>ID: {participant.id.slice(0, 8)}...</span>
+                                                            <span>ニックネーム: {participant.nickname || '未登録'}</span>
+                                                            <span>学籍番号: {participant.profile.studentId || '未登録'}</span>
                                                         </div>
+                                                        {!participant.profileCompleted && (
+                                                            <Badge variant="outline" className="text-[10px]">
+                                                                プロフィール未入力
+                                                            </Badge>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     {participant.language === 'en' ? '英語' : participant.language === 'ja' ? '日本語' : '未設定'}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div>
-                                                        <div className="font-medium">
-                                                            {participant.completedBlocks}/{configTotalBlocks} ブロック
-                                                        </div>
-                                                        <div className="text-sm text-muted-foreground">
-                                                            {participant.totalTrials}/{configTotalTrials} 試行
-                                                        </div>
+                                                    <div className="mt-2 flex flex-wrap gap-2">
+                                                        <ConditionStatusPill label="Static" done={participant.conditionCompletion.static} />
+                                                        <ConditionStatusPill label="Personalized" done={participant.conditionCompletion.personalized} />
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div>
-                                                        <div className="font-medium">
-                                                            RT: {participant.avgReactionTime ?? '-'}ms
-                                                        </div>
-                                                        <div className="text-sm text-muted-foreground">
-                                                            正答率: {participant.accuracy ?? '-'}%
-                                                        </div>
-                                                    </div>
+                                                    <span className="text-sm text-muted-foreground">-</span>
                                                 </TableCell>
                                                 <TableCell className="min-w-[220px] space-y-2">
                                                     <InviteLinkRow
@@ -563,15 +661,12 @@ export default function AdminDashboard() {
                                                         <Eye className="h-3.5 w-3.5 mr-1" />
                                                         詳細
                                                     </Button>
-                                                    <Button
-                                                        variant="destructive"
-                                                        size="sm"
+                                                    <DeleteParticipantButton
+                                                        participantId={participant.id}
+                                                        participantLabel={participant.displayName || participant.nickname || participant.id.slice(0, 8)}
+                                                        onConfirm={handleDeleteParticipant}
                                                         disabled={deletingId === participant.id}
-                                                        onClick={() => handleDeleteParticipant(participant.id)}
-                                                    >
-                                                        <Trash2 className="h-3.5 w-3.5 mr-1" />
-                                                        {deletingId === participant.id ? '削除中' : '削除'}
-                                                    </Button>
+                                                    />
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -586,7 +681,9 @@ export default function AdminDashboard() {
                     <Card>
                         <CardHeader className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                             <div>
-                                <CardTitle>参加者詳細: {selectedParticipant.id.slice(0, 8)}...</CardTitle>
+                                <CardTitle>
+                                    参加者詳細: {selectedParticipant.displayName || selectedParticipant.nickname || selectedParticipant.id.slice(0, 8)}
+                                </CardTitle>
                                 <CardDescription>
                                     プロフィールと実験履歴を参照できます
                                 </CardDescription>
@@ -598,14 +695,12 @@ export default function AdminDashboard() {
                                 >
                                     一覧に戻る
                                 </Button>
-                                <Button
-                                    variant="destructive"
+                                <DeleteParticipantButton
+                                    participantId={selectedParticipant.id}
+                                    participantLabel={selectedParticipant.displayName || selectedParticipant.nickname || selectedParticipant.id.slice(0, 8)}
+                                    onConfirm={handleDeleteParticipant}
                                     disabled={deletingId === selectedParticipant.id}
-                                    onClick={() => handleDeleteParticipant(selectedParticipant.id)}
-                                >
-                                    <Trash2 className="h-4 w-4 mr-1" />
-                                    {deletingId === selectedParticipant.id ? '削除中' : '参加者を削除'}
-                                </Button>
+                                />
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-6">

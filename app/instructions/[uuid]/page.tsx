@@ -18,22 +18,66 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
 
     const copy = language === 'ja'
         ? {
-            heroTitle: 'Stroop実験を攻略しよう',
-            heroSubtitle: '色と言葉のズレを読み解きながら、最速かつ最も正確な反応を目指します。',
-            measurement: 'この実験ではキー入力の反応速度をミリ秒単位で計測し、正答率とセットでスコア化します。',
-            challenge: 'スピードと正確さの両立がハイスコアの鍵。自分らしいプレイスタイルでベストタイムを更新しましょう。',
+            heroTitle: 'Stroop実験とは？',
+            heroIntro: '色を識別する力と注意の切り替えを測る、認知心理学の代表的な課題です。',
+            heroDetails: [
+                '画面に表示される単語の「意味」ではなく、インクの色だけを素早く判定し、対応するキーを入力します。',
+                'ニンテンドー3DSなどで遊んだ脳トレを思い出す方もいるかもしれませんが、今回は研究目的の正式な計測です。',
+                'なるべく正確に、そして可能な限り速く回答できるよう意識してください。'
+            ],
             examplesTitle: '例題でルールを確認',
-            motivation: 'ゲーム感覚で挑戦しながらも、落ち着いた判断が結果を左右します。肩の力を抜いて集中し続けましょう。',
             placeholderLabel: 'ここにスクリーンショットを配置'
         }
         : {
-            heroTitle: 'Master the Stroop Challenge',
-            heroSubtitle: 'React to the ink color—not the written word—to hit fast and accurate responses.',
-            measurement: 'Every key press is logged in milliseconds and paired with accuracy to calculate your score.',
-            challenge: 'Balance precision with speed to climb the leaderboard. Stay calm and keep the rhythm.',
+            heroTitle: 'What is the Stroop task?',
+            heroIntro: 'It is a classic cognitive test that measures how quickly you can identify ink colors when the written word disagrees.',
+            heroDetails: [
+                'Ignore the meaning of each word and respond only to the ink color using the assigned keys.',
+                'If you have tried brain-training titles on handheld consoles such as the Nintendo 3DS, the format may feel familiar, but this session records research-grade data.',
+                'Strive for answers that remain both accurate and as fast as possible.'
+            ],
             examplesTitle: 'Walkthrough Examples',
-            motivation: 'Treat it like a focused mini game—engaging but composed—to keep your best pace.',
             placeholderLabel: 'Place your screenshot here'
+        };
+
+    const experimentFlowCopy = language === 'ja'
+        ? {
+            title: '実験の進め方',
+            description: 'この実験は「練習」と「本番」の二段階で構成されています。',
+            steps: [
+                {
+                    label: '練習パート',
+                    detail: '手順やキー配置に慣れることが目的です。納得できるまで何度でも繰り返してかまいません。'
+                },
+                {
+                    label: '本番パート',
+                    detail: '計測は1回限りで途中停止はできません。集中した状態で一気に最後まで進みます。'
+                },
+                {
+                    label: '所要時間',
+                    detail: '練習と本番を合わせておよそ20分程度を想定しています。'
+                }
+            ],
+            note: '静かで集中できる環境を整えてから進めてください。'
+        }
+        : {
+            title: 'Experiment flow',
+            description: 'The session is organized into two consecutive stages: practice and the main task.',
+            steps: [
+                {
+                    label: 'Practice phase',
+                    detail: 'Use it to become familiar with the keys and procedure. You may repeat it as many times as you need.'
+                },
+                {
+                    label: 'Main phase',
+                    detail: 'Data collection happens once only and cannot be paused mid-way, so finish it in a single focused run.'
+                },
+                {
+                    label: 'Total duration',
+                    detail: 'Expect the practice plus main phase to take roughly 20 minutes overall.'
+                }
+            ],
+            note: 'Please confirm you are in a quiet environment where you can concentrate before proceeding.'
         };
 
     const handleStartPractice = () => {
@@ -104,35 +148,26 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
             }
         ];
 
-    const focusPoints = language === 'ja'
-        ? [
-            '単語の意味ではなく、文字の色に100%集中する',
-            'スピードを意識しつつ、正答率も落とさずに進める',
-            'リズムが乱れたら深呼吸して再スタート',
-            '練習でキー配置に慣れてから本番へ'
-        ]
-        : [
-            'Focus entirely on the ink color, not the written word',
-            'Balance high speed with dependable accuracy',
-            'If you lose rhythm, pause briefly and reset your breathing',
-            'Use the practice run to build muscle memory'
-        ];
-
     return (
         <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100 px-6 py-12 text-gray-900">
             <div className="mx-auto flex max-w-5xl flex-col gap-10">
                 <section className="rounded-3xl border border-slate-100 bg-white/90 p-8 shadow-[0_40px_100px_rgba(15,23,42,0.08)] backdrop-blur">
                     <div className="space-y-6 text-center">
-                        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-500">Reaction Time Challenge</p>
+                        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-500">
+                            {language === 'ja' ? 'Reaction Time Study' : 'Reaction Time Study'}
+                        </p>
                         <h1 className="text-4xl font-bold leading-tight text-slate-900">
                             {copy.heroTitle}
                         </h1>
-                        <p className="text-lg text-slate-600">
-                            {copy.heroSubtitle}
+                        <p className="text-lg text-slate-700">
+                            {copy.heroIntro}
                         </p>
-                        <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 text-sm text-indigo-900">
-                            <p className="font-semibold">{copy.measurement}</p>
-                            <p>{copy.challenge}</p>
+                        <div className="space-y-3 text-left text-slate-700 sm:text-center">
+                            {copy.heroDetails.map(detail => (
+                                <p key={detail} className="text-base leading-relaxed">
+                                    {detail}
+                                </p>
+                            ))}
                         </div>
                     </div>
                 </section>
@@ -192,19 +227,20 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                     </div>
 
                     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                        <h3 className="text-xl font-semibold text-slate-900">Focus Tips</h3>
-                        <ul className="mt-4 space-y-3 text-sm text-slate-600">
-                            {focusPoints.map((tip, index) => (
-                                <li key={tip} className="flex items-start gap-3">
-                                    <span className="mt-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
-                                        {index + 1}
-                                    </span>
-                                    <span>{tip}</span>
+                        <h3 className="text-xl font-semibold text-slate-900">{experimentFlowCopy.title}</h3>
+                        <p className="mt-2 text-sm text-slate-600">
+                            {experimentFlowCopy.description}
+                        </p>
+                        <ul className="mt-4 space-y-3">
+                            {experimentFlowCopy.steps.map(step => (
+                                <li key={step.label} className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+                                    <p className="text-sm font-semibold text-slate-900">{step.label}</p>
+                                    <p className="mt-1 text-sm text-slate-600">{step.detail}</p>
                                 </li>
                             ))}
                         </ul>
                         <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
-                            {copy.motivation}
+                            {experimentFlowCopy.note}
                         </div>
                     </div>
                 </section>

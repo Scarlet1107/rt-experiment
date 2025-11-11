@@ -33,7 +33,13 @@ function PracticeContent({ uuid }: PracticeContentProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const condition = (searchParams.get('condition') as 'static' | 'personalized') || 'static';
-    const { totalBlocks, trialsPerBlock, totalTrials } = experimentConfig;
+    const {
+        totalBlocks,
+        trialsPerBlock,
+        totalTrials,
+        practiceTrialCount,
+        trialTimeLimitMs,
+    } = experimentConfig;
 
     const [state, setState] = useState<PracticeState>('intro');
     const [stimuli, setStimuli] = useState<StroopStimulus[]>([]);
@@ -44,6 +50,7 @@ function PracticeContent({ uuid }: PracticeContentProps) {
     const trialStartRef = useRef<number | null>(null);
     const respondedRef = useRef(false);
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const trialTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const KEY_TO_ANSWER: Record<KeyCode, AnswerType> = useMemo(() => ({
         F: 'RED',
@@ -80,19 +87,75 @@ function PracticeContent({ uuid }: PracticeContentProps) {
 
     const currentStimulus = stimuli[currentIndex] || null;
 
-    useEffect(() => {
-        // 練習用の刺激を生成（10試行程度）
-        const allStimuli = generateBlockStimuli();
-        const practiceStimuli = allStimuli.slice(0, 10);
-        setStimuli(practiceStimuli);
+    const createPracticeStimuli = useCallback(() => {
+        const count = Math.max(1, practiceTrialCount);
+        return generateBlockStimuli(count);
+    }, [practiceTrialCount]);
+
+    const clearTrialTimeout = useCallback(() => {
+        if (trialTimeoutRef.current) {
+            clearTimeout(trialTimeoutRef.current);
+            trialTimeoutRef.current = null;
+        }
     }, []);
+
+    const scheduleNextPracticeStep = useCallback(() => {
+        if (feedbackTimeoutRef.current) {
+            clearTimeout(feedbackTimeoutRef.current);
+        }
+
+        feedbackTimeoutRef.current = setTimeout(() => {
+            setShowFeedback(false);
+            setCurrentIndex(prevIndex => {
+                const nextIndex = prevIndex + 1;
+                if (nextIndex >= stimuli.length) {
+                    setState('summary');
+                    return prevIndex;
+                }
+                return nextIndex;
+            });
+        }, 1000);
+    }, [stimuli.length]);
+
+    const recordPracticeResult = useCallback((result: PracticeResult) => {
+        setResults(prev => [...prev, result]);
+        setShowFeedback(true);
+        scheduleNextPracticeStep();
+    }, [scheduleNextPracticeStep]);
+
+    const handleTrialTimeout = useCallback(() => {
+        if (!trialTimeLimitMs || respondedRef.current || !currentStimulus) return;
+        respondedRef.current = true;
+        clearTrialTimeout();
+
+        const timeoutResult: PracticeResult = {
+            stimulus: currentStimulus,
+            responseKey: null,
+            chosenAnswer: null,
+            isCorrect: false,
+            reactionTime: trialTimeLimitMs,
+        };
+
+        recordPracticeResult(timeoutResult);
+    }, [trialTimeLimitMs, currentStimulus, recordPracticeResult, clearTrialTimeout]);
+
+    const scheduleTrialTimeout = useCallback(() => {
+        clearTrialTimeout();
+        if (!trialTimeLimitMs) return;
+        trialTimeoutRef.current = setTimeout(() => {
+            handleTrialTimeout();
+        }, trialTimeLimitMs);
+    }, [trialTimeLimitMs, clearTrialTimeout, handleTrialTimeout]);
 
     useEffect(() => {
         if (state === 'running' && currentStimulus) {
             trialStartRef.current = performance.now();
             respondedRef.current = false;
+            scheduleTrialTimeout();
+        } else {
+            clearTrialTimeout();
         }
-    }, [state, currentStimulus]);
+    }, [state, currentStimulus, scheduleTrialTimeout, clearTrialTimeout]);
 
     useEffect(() => {
         if (state !== 'running') return;
@@ -121,6 +184,7 @@ function PracticeContent({ uuid }: PracticeContentProps) {
             }
 
             respondedRef.current = true;
+            clearTrialTimeout();
 
             const result: PracticeResult = {
                 stimulus: currentStimulus!,
@@ -130,42 +194,47 @@ function PracticeContent({ uuid }: PracticeContentProps) {
                 reactionTime: rt,
             };
 
-            setResults(prev => [...prev, result]);
-            setShowFeedback(true);
-
-            // フィードバック表示後、次の試行へ
-            feedbackTimeoutRef.current = setTimeout(() => {
-                setShowFeedback(false);
-                const nextIndex = currentIndex + 1;
-                if (nextIndex >= stimuli.length) {
-                    setState('summary');
-                } else {
-                    setCurrentIndex(nextIndex);
-                }
-            }, 1000);
+            recordPracticeResult(result);
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [condition, state, currentStimulus, currentIndex, stimuli.length, router, uuid, KEY_TO_ANSWER]);
+    }, [condition, state, currentStimulus, router, uuid, KEY_TO_ANSWER, recordPracticeResult, clearTrialTimeout]);
 
     useEffect(() => {
         return () => {
             if (feedbackTimeoutRef.current) {
                 clearTimeout(feedbackTimeoutRef.current);
             }
+            if (trialTimeoutRef.current) {
+                clearTimeout(trialTimeoutRef.current);
+            }
         };
     }, []);
 
     const handleStartPractice = useCallback(() => {
-        setState('running');
+        if (feedbackTimeoutRef.current) {
+            clearTimeout(feedbackTimeoutRef.current);
+            feedbackTimeoutRef.current = null;
+        }
+        clearTrialTimeout();
+        setStimuli(createPracticeStimuli());
         setCurrentIndex(0);
         setResults([]);
-    }, []);
+        setShowFeedback(false);
+        setState('running');
+    }, [createPracticeStimuli, clearTrialTimeout]);
 
     const handleContinuePractice = () => {
+        if (feedbackTimeoutRef.current) {
+            clearTimeout(feedbackTimeoutRef.current);
+            feedbackTimeoutRef.current = null;
+        }
+        clearTrialTimeout();
+        setStimuli(createPracticeStimuli());
         setCurrentIndex(0);
         setResults([]);
+        setShowFeedback(false);
         setState('running');
     };
 

@@ -19,12 +19,41 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Play, Brain, Target, Clock, CheckCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Play, Brain, Target, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { experimentConfig } from '@/lib/config/experiment';
 
 interface ExperimentContentProps {
     uuid: string;
 }
+
+const toParticipantInfo = (participant: any): ParticipantInfo | null => {
+    if (!participant) return null;
+
+    return {
+        id: participant.id,
+        nickname: participant.nickname,
+        preferredPraise: participant.preferredPraise,
+        tonePreference: participant.tonePreference,
+        motivationStyle: participant.motivationStyle,
+        evaluationFocus: participant.evaluationFocus,
+        language: (participant.language as 'ja' | 'en') || 'ja'
+    };
+};
+
+const fromLocalStorage = (key: string): ParticipantInfo | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return toParticipantInfo(parsed);
+    } catch (error) {
+        console.warn('Failed to parse participant data from localStorage:', error);
+        return null;
+    }
+};
 
 // 実験の状態管理
 type ExperimentState = 'preparation' | 'countdown' | 'running' | 'feedback' | 'completed';
@@ -40,14 +69,27 @@ interface TrialResult extends Trial {
     blockId: string;
 }
 
+interface ParsedFeedback {
+    heading: string;
+    stats: { label: string; value: string }[];
+    notes: string[];
+}
+
 const NEXT_TRIAL_DELAY_MS = 500;
-const TRIAL_FEEDBACK_DURATION_MS = 650;
+const TRIAL_FEEDBACK_DURATION_MS = NEXT_TRIAL_DELAY_MS;
 
 function ExperimentContent({ uuid }: ExperimentContentProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { language } = useLanguage();
-    const { totalBlocks, trialsPerBlock, totalTrials, feedbackCountdownSeconds } = experimentConfig;
+    const {
+        totalBlocks,
+        trialsPerBlock,
+        totalTrials,
+        feedbackCountdownSeconds,
+        trialTimeLimitMs,
+        showProgressDebug,
+    } = experimentConfig;
 
     // 実験全体の状態
     const [experimentState, setExperimentState] = useState<ExperimentState>('preparation');
@@ -77,6 +119,8 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     const [participantInfo, setParticipantInfo] = useState<ParticipantInfo | null>(null);
     const [conditionType, setConditionType] = useState<'static' | 'personalized'>('static');
     const [isPreparingExperiment, setIsPreparingExperiment] = useState(false);
+    const [startStatusMessage, setStartStatusMessage] = useState<string | null>(null);
+    const [startError, setStartError] = useState<string | null>(null);
 
     // キー入力管理
     const trialStartRef = useRef<number>(0);
@@ -86,6 +130,8 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     const blockResultsRef = useRef<BlockResult[]>([]);
     const isCompletingRef = useRef(false);
     const trialFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const trialTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const trialTimeoutHandlerRef = useRef<(trial: CurrentTrial) => void>(() => { });
 
     // キー対応表
     const KEY_TO_ANSWER: Record<KeyCode, AnswerType> = useMemo(() => ({
@@ -108,6 +154,36 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             : { correct: 'Correct', incorrect: 'Incorrect' }
     ), [language]);
 
+    const parsedBlockFeedback: ParsedFeedback = useMemo(() => {
+        if (!blockFeedback) {
+            return { heading: '', stats: [], notes: [] };
+        }
+
+        const lines = blockFeedback
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean);
+
+        if (!lines.length) {
+            return { heading: '', stats: [], notes: [] };
+        }
+
+        const [heading, ...rest] = lines;
+        const stats = rest
+            .filter(line => line.includes(':'))
+            .map(line => {
+                const [label, ...valueParts] = line.split(':');
+                return {
+                    label: label.trim(),
+                    value: valueParts.join(':').trim()
+                };
+            });
+
+        const notes = rest.filter(line => !line.includes(':'));
+
+        return { heading, stats, notes };
+    }, [blockFeedback]);
+
     // 実験初期化（参加者情報とフィードバックパターンの取得）
     const clearCountdownTimer = useCallback(() => {
         if (countdownTimerRef.current) {
@@ -122,6 +198,19 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             feedbackTimerRef.current = null;
         }
     }, []);
+
+    const clearTrialTimeout = useCallback(() => {
+        if (trialTimeoutRef.current) {
+            clearTimeout(trialTimeoutRef.current);
+            trialTimeoutRef.current = null;
+        }
+    }, []);
+
+    const scheduleTrialTimer = useCallback((onTimeout: () => void) => {
+        clearTrialTimeout();
+        if (!trialTimeLimitMs) return;
+        trialTimeoutRef.current = setTimeout(onTimeout, trialTimeLimitMs);
+    }, [trialTimeLimitMs, clearTrialTimeout]);
 
     const showTrialFeedback = useCallback((status: 'correct' | 'incorrect') => {
         if (trialFeedbackTimerRef.current) {
@@ -152,27 +241,86 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         setExperimentState('countdown');
     }, [experimentState, currentBlock, totalBlocks, trialsPerBlock]);
 
+    const ensureParticipantReady = useCallback(async (): Promise<ParticipantInfo | null> => {
+        if (participantInfo) return participantInfo;
+
+        try {
+            const participant = await getParticipant(uuid);
+            const info = toParticipantInfo(participant);
+            if (info) {
+                setParticipantInfo(info);
+                return info;
+            }
+        } catch (error) {
+            console.error('Failed to load participant from IndexedDB:', error);
+        }
+
+        const localInfo = fromLocalStorage(`participant-${uuid}`);
+        if (localInfo) {
+            setParticipantInfo(localInfo);
+            return localInfo;
+        }
+
+        return null;
+    }, [participantInfo, uuid]);
+
     const handleExperimentStart = useCallback(async () => {
         if (experimentState !== 'preparation' || isPreparingExperiment) return;
 
         setIsPreparingExperiment(true);
+        setStartError(null);
+        setStartStatusMessage(
+            conditionType === 'personalized'
+                ? language === 'ja'
+                    ? '参加者情報を読み込んでいます…'
+                    : 'Loading participant info…'
+                : language === 'ja'
+                    ? '実験を準備しています…'
+                    : 'Preparing experiment…'
+        );
+
         try {
+            let info = participantInfo;
             if (conditionType === 'personalized') {
-                if (!participantInfo) {
-                    console.warn('Participant info is missing for personalized condition');
-                } else if (!feedbackPatterns) {
-                    const patterns = await getOrGenerateFeedbackPatterns(participantInfo);
+                if (!info) {
+                    info = await ensureParticipantReady();
+                }
+
+                if (!info) {
+                    setStartStatusMessage(null);
+                    setStartError(
+                        language === 'ja'
+                            ? '参加者情報が見つかりませんでした。プロフィール入力からやり直してください。'
+                            : 'We could not locate your participant profile. Please repeat the questionnaire.'
+                    );
+                    return;
+                }
+
+                setStartStatusMessage(language === 'ja' ? 'フィードバックを準備しています…' : 'Preparing feedback…');
+                if (!feedbackPatterns) {
+                    const patterns = await getOrGenerateFeedbackPatterns(info);
                     setFeedbackPatterns(patterns);
                 }
             }
 
+                setStartStatusMessage(language === 'ja' ? '実験をセットアップしています…' : 'Configuring experiment…');
             startNewBlock();
+            setStartStatusMessage(null);
         } catch (error) {
             console.error('Failed to prepare experiment start:', error);
+            const message =
+                conditionType === 'personalized'
+                    ? language === 'ja'
+                        ? '参加者情報を取得できませんでした。前の画面に戻ってプロフィールを確認してください。'
+                        : 'We could not load your participant profile. Please go back and confirm your questionnaire.'
+                    : language === 'ja'
+                        ? '開始準備中にエラーが発生しました。もう一度お試しください。'
+                        : 'Something went wrong while preparing. Please try again.';
+            setStartError(message);
         } finally {
             setIsPreparingExperiment(false);
         }
-    }, [conditionType, experimentState, feedbackPatterns, participantInfo, startNewBlock, isPreparingExperiment]);
+    }, [conditionType, ensureParticipantReady, experimentState, feedbackPatterns, participantInfo, startNewBlock, isPreparingExperiment, language]);
 
     useEffect(() => {
         const condition = (searchParams.get('condition') as 'static' | 'personalized') || 'static';
@@ -181,16 +329,8 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         const initializeParticipant = async () => {
             try {
                 const participant = await getParticipant(uuid);
-                if (participant) {
-                    const info: ParticipantInfo = {
-                        id: participant.id,
-                        nickname: participant.nickname,
-                        preferredPraise: participant.preferredPraise,
-                        tonePreference: participant.tonePreference,
-                        motivationStyle: participant.motivationStyle,
-                        evaluationFocus: participant.evaluationFocus,
-                        language: participant.language as 'ja' | 'en'
-                    };
+                const info = toParticipantInfo(participant);
+                if (info) {
                     setParticipantInfo(info);
                 }
             } catch (error) {
@@ -296,8 +436,40 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         // 少し待ってから試行開始
         setTimeout(() => {
             trialStartRef.current = performance.now();
+            scheduleTrialTimer(() => {
+                trialTimeoutHandlerRef.current?.(trial);
+            });
         }, 500);
-    }, [completeBlock]);
+    }, [completeBlock, scheduleTrialTimer]);
+
+    const handleTrialTimeout = useCallback((timedOutTrial: CurrentTrial) => {
+        if (!trialTimeLimitMs || hasRespondedRef.current) return;
+
+        hasRespondedRef.current = true;
+        clearTrialTimeout();
+
+        const trialResult: TrialResult = {
+            id: currentBlockTrials.length + 1,
+            blockId: timedOutTrial.blockId,
+            stimulus: timedOutTrial.stimulus,
+            responseKey: null,
+            chosenAnswer: null,
+            isCorrect: false,
+            reactionTime: trialTimeLimitMs,
+            timestamp: new Date(),
+        };
+
+        setCurrentBlockTrials(prev => [...prev, trialResult]);
+        showTrialFeedback('incorrect');
+
+        setTimeout(async () => {
+            const nextIndex = currentTrialIndex + 1;
+            setCurrentTrialIndex(nextIndex);
+            await prepareNextTrial(blockStimuli, nextIndex, currentBlock);
+        }, NEXT_TRIAL_DELAY_MS);
+    }, [trialTimeLimitMs, clearTrialTimeout, currentBlockTrials.length, showTrialFeedback, currentTrialIndex, blockStimuli, currentBlock, prepareNextTrial]);
+
+    trialTimeoutHandlerRef.current = handleTrialTimeout;
 
     const handleCountdownComplete = useCallback(() => {
         if (!blockStimuli.length) return;
@@ -334,6 +506,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         if (!currentTrial || hasRespondedRef.current) return;
 
         hasRespondedRef.current = true;
+        clearTrialTimeout();
         const chosenAnswer = KEY_TO_ANSWER[responseKey];
         const isCorrect = chosenAnswer === currentTrial.stimulus.correctAnswer;
 
@@ -357,7 +530,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             setCurrentTrialIndex(nextIndex);
             await prepareNextTrial(blockStimuli, nextIndex, currentBlock);
         }, NEXT_TRIAL_DELAY_MS);
-    }, [currentTrial, hasRespondedRef, KEY_TO_ANSWER, currentBlockTrials.length, currentTrialIndex, blockStimuli, currentBlock, prepareNextTrial, showTrialFeedback]);
+    }, [currentTrial, hasRespondedRef, KEY_TO_ANSWER, currentBlockTrials.length, currentTrialIndex, blockStimuli, currentBlock, prepareNextTrial, showTrialFeedback, clearTrialTimeout]);
 
     // 実験完了処理
     const completeExperiment = useCallback(async () => {
@@ -376,9 +549,12 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             : 0;
 
         const experimentId = `${uuid}-${conditionType}`;
+        const pendingExperimentKey = `pending-experiment-${experimentId}`;
         const sessionNumber: 1 | 2 = conditionType === 'personalized' ? 2 : 1;
         const completedAt = new Date();
         const startedAt = results[0]?.trials[0]?.timestamp ?? completedAt;
+
+        const totalTrialsAttempted = results.reduce((sum, block) => sum + block.trials.length, 0);
 
         const experiment: Experiment = {
             id: experimentId,
@@ -390,19 +566,40 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             completedAt,
             blocks: results,
             overallAccuracy,
-            overallAverageRT
+            overallAverageRT,
+            plannedTotalTrials: totalTrials,
+            plannedTrialsPerBlock: trialsPerBlock,
+            totalTrialsAttempted,
         };
 
+        let saveStatus: 'success' | 'local-only' | 'failed' = 'failed';
         try {
             await saveExperiment(experiment);
-            await syncExperimentToSupabase(experiment.id);
+            saveStatus = 'local-only';
+            try {
+                await syncExperimentToSupabase(experiment.id);
+                saveStatus = 'success';
+            } catch (syncError) {
+                console.error('データ同期エラー:', syncError);
+            }
         } catch (error) {
             console.error('データ保存エラー:', error);
             isCompletingRef.current = false;
+            if (typeof window !== 'undefined') {
+                try {
+                    sessionStorage.setItem(pendingExperimentKey, JSON.stringify(experiment));
+                } catch (storageError) {
+                    console.warn('Failed to cache experiment payload:', storageError);
+                }
+            }
         }
 
-        router.push(`/complete/${uuid}?condition=${conditionType}`);
-    }, [conditionType, participantInfo?.language, router, uuid, language]);
+        if (typeof window !== 'undefined' && saveStatus === 'success') {
+            sessionStorage.removeItem(pendingExperimentKey);
+        }
+
+        router.push(`/complete/${uuid}?condition=${conditionType}&saveStatus=${saveStatus}`);
+    }, [conditionType, participantInfo?.language, router, uuid, language, totalTrials, trialsPerBlock]);
 
     // フィードバック終了後の処理
     const advanceAfterFeedback = useCallback(() => {
@@ -484,9 +681,18 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     }, [advanceAfterFeedback, experimentState]);
 
     useEffect(() => {
+        if (experimentState !== 'running') {
+            clearTrialTimeout();
+        }
+    }, [experimentState, clearTrialTimeout]);
+
+    useEffect(() => {
         return () => {
             if (trialFeedbackTimerRef.current) {
                 clearTimeout(trialFeedbackTimerRef.current);
+            }
+            if (trialTimeoutRef.current) {
+                clearTimeout(trialTimeoutRef.current);
             }
         };
     }, []);
@@ -571,26 +777,63 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
 
                             <Separator />
 
-                            <div className="text-center">
+                            {conditionType === 'personalized' && (
+                                <Alert className="bg-amber-50 border border-amber-200 text-amber-900">
+                                    <Clock className="h-4 w-4 text-amber-600" />
+                                    <AlertTitle>
+                                        {language === 'ja'
+                                            ? 'フィードバック生成には約10秒かかります'
+                                            : 'Personalized feedback takes about 10 seconds'}
+                                    </AlertTitle>
+                                    <AlertDescription>
+                                        {language === 'ja'
+                                            ? 'パーソナライズされたフィードバックを準備するため、開始直後に通常10秒程度の処理時間が発生します。メッセージが表示されるまでそのままお待ちください。'
+                                            : 'Generating your personalized feedback usually takes around 10 seconds when the experiment begins. Please stay on this screen until the message disappears.'}
+                                    </AlertDescription>
+                                </Alert>
+                            )}
+
+                            <Alert className="bg-slate-50 border border-slate-200 text-slate-900">
+                                <AlertCircle className="h-4 w-4 text-amber-600" />
+                                <AlertTitle>
+                                    {language === 'ja' ? '開始前のお願い' : 'Before you begin'}
+                                </AlertTitle>
+                                <AlertDescription>
+                                    {language === 'ja'
+                                        ? '本番パートは約15分かかり途中で停止できません。お手洗いなどは先に済ませ、静かで集中できる環境を整えてから開始してください。'
+                                        : 'The main phase takes about 15 minutes and cannot be paused. Visit the restroom first and make sure you are in a quiet, focused environment before starting.'}
+                                </AlertDescription>
+                            </Alert>
+
+                            <div className="text-center space-y-2">
                                 <Button
                                     size="lg"
                                     onClick={handleExperimentStart}
                                     className="px-8"
                                     disabled={isPreparingExperiment}
                                 >
-                                    <Play className="mr-2 h-4 w-4" />
-                                    {isPreparingExperiment ? (language === 'ja' ? '準備中...' : 'Preparing...') : (language === 'ja' ? '実験を開始' : 'Start experiment')}
+                                    {isPreparingExperiment ? (
+                                        <span className="flex items-center gap-2">
+                                            <Spinner className="h-4 w-4" />
+                                            {startStatusMessage || (language === 'ja' ? '準備中...' : 'Preparing...')}
+                                        </span>
+                                    ) : (
+                                        <>
+                                            <Play className="mr-2 h-4 w-4" />
+                                            {language === 'ja' ? '実験を開始' : 'Start experiment'}
+                                        </>
+                                    )}
                                 </Button>
-                                <p className="text-xs text-muted-foreground mt-3">
+                                <p className="text-xs text-muted-foreground">
                                     {language === 'ja'
                                         ? 'D / F / J / K のいずれかを押しても開始できます'
                                         : 'Press any of D / F / J / K to start as well.'}
-                                    {isPreparingExperiment && (
-                                        <span className="ml-1 text-[11px]">
-                                            {language === 'ja' ? '（現在フィードバックを準備中です）' : '(Preparing feedback…)'}
-                                        </span>
-                                    )}
                                 </p>
+                                {startError && (
+                                    <p className="text-sm text-red-600">
+                                        {startError}
+                                    </p>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
@@ -619,18 +862,20 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                 {/* 実行中画面 */}
                 {experimentState === 'running' && currentTrial && (
                     <div className="space-y-8">
-                        <div className="flex items-center justify-between text-sm text-muted-foreground px-1">
-                            <span className="font-medium">
-                                {language === 'ja'
-                                    ? `ブロック ${currentBlock}/${totalBlocks} ・ 試行 ${currentTrial.trialNumber}/${trialsPerBlock}`
-                                    : `Block ${currentBlock}/${totalBlocks} • Trial ${currentTrial.trialNumber}/${trialsPerBlock}`}
-                            </span>
-                            <span>
-                                {language === 'ja'
-                                    ? `全体進捗: ${progressPercent}%`
-                                    : `Overall progress: ${progressPercent}%`}
-                            </span>
-                        </div>
+                        {showProgressDebug && (
+                            <div className="flex items-center justify-between text-sm text-muted-foreground px-1">
+                                <span className="font-medium">
+                                    {language === 'ja'
+                                        ? `ブロック ${currentBlock}/${totalBlocks} ・ 試行 ${currentTrial.trialNumber}/${trialsPerBlock}`
+                                        : `Block ${currentBlock}/${totalBlocks} • Trial ${currentTrial.trialNumber}/${trialsPerBlock}`}
+                                </span>
+                                <span>
+                                    {language === 'ja'
+                                        ? `全体進捗: ${progressPercent}%`
+                                        : `Overall progress: ${progressPercent}%`}
+                                </span>
+                            </div>
+                        )}
 
                         {/* 刺激表示 */}
                         <Card>
@@ -644,10 +889,10 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                             </CardContent>
                         </Card>
 
-                        <div className="h-6 text-center">
+                        <div className="min-h-[40px] text-center">
                             {trialFeedback && (
                                 <span
-                                    className={`text-lg font-semibold ${trialFeedback === 'correct' ? 'text-emerald-600' : 'text-red-500'}`}
+                                    className={`text-2xl font-bold tracking-wide sm:text-3xl ${trialFeedback === 'correct' ? 'text-emerald-600' : 'text-red-500'}`}
                                 >
                                     {trialFeedbackText[trialFeedback]}
                                 </span>
@@ -701,8 +946,13 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                                     </p>
                                 </div>
                                 <div className="space-y-2">
-                                    {blockFeedback.split('\n').filter(Boolean).map((line, index) => (
-                                        <p key={index} className="text-2xl font-semibold leading-snug">
+                                    {(parsedBlockFeedback.heading || blockFeedback) && (
+                                        <p className="text-2xl font-semibold leading-snug">
+                                            {parsedBlockFeedback.heading || blockFeedback}
+                                        </p>
+                                    )}
+                                    {parsedBlockFeedback.notes.map((line, index) => (
+                                        <p key={index} className="text-lg text-muted-foreground">
                                             {line}
                                         </p>
                                     ))}
@@ -733,15 +983,38 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
 
                                 <CardContent className="space-y-6">
                                     <div className="bg-muted/30 rounded-lg p-6">
-                                        <div className="font-mono text-center space-y-3">
-                                            {blockFeedback.split('\n').map((line, index) => (
-                                                <div
-                                                    key={index}
-                                                    className={line.includes(':') ? 'text-lg' : 'text-sm text-muted-foreground'}
-                                                >
-                                                    {line}
+                                        <div className="space-y-4">
+                                            <div>
+                                                <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                                                    {language === 'ja'
+                                                        ? `ブロック${currentBlock} サマリー`
+                                                        : `Block ${currentBlock} summary`}
+                                                </p>
+                                                <h3 className="text-2xl font-semibold text-slate-900">
+                                                    {parsedBlockFeedback.heading || (language === 'ja' ? 'ブロック結果' : 'Block results')}
+                                                </h3>
+                                            </div>
+                                            {parsedBlockFeedback.stats.length > 0 && (
+                                                <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                                    {parsedBlockFeedback.stats.map((stat, index) => (
+                                                        <div key={`${stat.label}-${index}`} className="rounded-xl border border-white/60 bg-white/80 p-4 text-left shadow-sm">
+                                                            <dt className="text-xs uppercase tracking-wider text-muted-foreground">
+                                                                {stat.label}
+                                                            </dt>
+                                                            <dd className="mt-1 text-2xl font-semibold text-slate-900">
+                                                                {stat.value}
+                                                            </dd>
+                                                        </div>
+                                                    ))}
+                                                </dl>
+                                            )}
+                                            {parsedBlockFeedback.notes.length > 0 && (
+                                                <div className="text-sm text-muted-foreground space-y-1">
+                                                    {parsedBlockFeedback.notes.map((note, index) => (
+                                                        <p key={index}>{note}</p>
+                                                    ))}
                                                 </div>
-                                            ))}
+                                            )}
                                         </div>
                                     </div>
 
@@ -751,8 +1024,13 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                                                 ? `自動で${currentBlock >= totalBlocks ? '完了画面へ遷移します' : '次のブロックへ進みます'}（残り ${feedbackCountdown}s）`
                                                 : `Auto-advancing to the ${currentBlock >= totalBlocks ? 'completion screen' : 'next block'} in ${feedbackCountdown}s`}
                                         </p>
-                                        <Button onClick={advanceAfterFeedback} variant="secondary">
-                                            {language === 'ja' ? '今すぐ進む' : 'Skip countdown'}
+                                        <Button
+                                            onClick={advanceAfterFeedback}
+                                            variant="default"
+                                            size="lg"
+                                            className="px-6 font-semibold"
+                                        >
+                                            {language === 'ja' ? '次へ進む' : 'Go to next step now'}
                                         </Button>
                                         <p className="text-xs text-muted-foreground">
                                             {language === 'ja'
@@ -778,10 +1056,25 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                             <CardTitle className="text-3xl">
                                 {language === 'ja' ? '実験完了！' : 'Experiment complete!'}
                             </CardTitle>
-                            <CardDescription>
-                                {language === 'ja'
-                                    ? 'お疲れ様でした。実験データの保存中です...'
-                                    : 'Great work. Saving your data now...'}
+                            <CardDescription className="space-y-1 text-base">
+                                <span className="block">
+                                    {language === 'ja'
+                                        ? 'お疲れ様でした。実験データを保存しています。'
+                                        : 'Great work. Saving your data now.'}
+                                </span>
+                                <span className="block text-sm text-muted-foreground">
+                                    <span className="inline-flex items-center gap-2">
+                                        <Spinner className="h-3.5 w-3.5" />
+                                        {language === 'ja'
+                                            ? '保存処理を実行中です。'
+                                            : 'Save is in progress.'}
+                                    </span>
+                                </span>
+                                <span className="block text-sm text-muted-foreground">
+                                    {language === 'ja'
+                                        ? '時間がかかる場合があります。しばらくお待ちください。'
+                                        : 'This may take a little while. Please wait for the confirmation.'}
+                                </span>
                             </CardDescription>
                         </CardHeader>
                     </Card>

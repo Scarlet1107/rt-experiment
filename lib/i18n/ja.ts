@@ -28,7 +28,7 @@ export const ja = {
         title: "事前アンケート",
         subtitle: "パーソナライズされたフィードバックのために、いくつか質問にお答えください",
         nickname: "呼び名（ニックネーム）",
-        nicknamePlaceholder: "例：さくらさん、Alex、etc.",
+        nicknamePlaceholder: "例：しょうご、Alex、etc.",
         nicknameHelper: "実験中のフィードバックで使用される名前です",
         preferredPraise: "好きな褒められ方・励まし方",
         preferredPraiseHint: "当てはまるものを複数選んでください",

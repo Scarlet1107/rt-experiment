@@ -54,6 +54,9 @@ export interface Experiment {
     blocks: BlockResult[];           // 全ブロックの結果
     overallAccuracy?: number;        // 全体正答率
     overallAverageRT?: number;       // 全体平均反応時間
+    plannedTotalTrials?: number;     // 想定されていた総試行数
+    plannedTrialsPerBlock?: number;  // 想定ブロック当たり試行数
+    totalTrialsAttempted?: number;   // 実際に行った試行数
 }
 
 // 参加者情報
@@ -87,13 +90,16 @@ export type FeedbackPattern = Record<FeedbackScenarioKey, string[]>;
 
 // 実験設定
 export interface ExperimentConfig {
-    totalBlocks: number;             // 総ブロック数
-    trialsPerBlock: number;          // ブロック当たりの試行数
-    totalTrials: number;             // 総試行数
-    feedbackCountdownSeconds: number; // フィードバック表示時間の上限（秒）
-    stimulusDisplayTime?: number;    // 刺激表示時間（ms、制限なしの場合null）
-    interTrialInterval?: number;     // 試行間間隔（ms）
-    feedbackDuration?: number;       // フィードバック表示時間（ms）
+    totalBlocks: number;               // 総ブロック数
+    trialsPerBlock: number;            // ブロック当たりの試行数
+    totalTrials: number;               // 総試行数
+    feedbackCountdownSeconds: number;  // フィードバック表示時間の上限（秒）
+    practiceTrialCount: number;        // 練習パートの試行数
+    trialTimeLimitMs: number | null;   // 1試行あたりの制限時間（ms、nullの場合は無制限）
+    showProgressDebug: boolean;        // 進捗表示のデバッグ用フラグ
+    stimulusDisplayTime?: number;      // 刺激表示時間（ms、制限なしの場合null）
+    interTrialInterval?: number;       // 試行間間隔（ms）
+    feedbackDuration?: number;         // フィードバック表示時間（ms）
 }
 
 // データベース用の型（Supabaseテーブル構造）
