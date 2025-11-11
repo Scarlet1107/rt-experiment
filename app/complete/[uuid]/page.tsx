@@ -91,6 +91,9 @@ function CompleteContent({ uuid }: CompleteContentProps) {
     const completedBlocks = displayExperimentData?.blocks.length ?? 0;
     const overallAccuracy = displayExperimentData?.overallAccuracy ?? 0;
     const overallAverageRT = displayExperimentData?.overallAverageRT ?? 0;
+    const rawOverallAverageRTCorrectOnly = displayExperimentData?.overallAverageRTCorrectOnly;
+    const hasOverallAverageRTCorrectOnly = typeof rawOverallAverageRTCorrectOnly === 'number' && !Number.isNaN(rawOverallAverageRTCorrectOnly);
+    const overallAverageRTCorrectOnly = hasOverallAverageRTCorrectOnly ? rawOverallAverageRTCorrectOnly : 0;
     const completedAt = displayExperimentData?.completedAt ? new Date(displayExperimentData.completedAt) : null;
     const sessionNumber = displayExperimentData?.sessionNumber ?? (condition === 'personalized' ? 2 : 1);
     const conditionLabel = (displayExperimentData?.conditionType || condition) === 'personalized' ? 'Personalized' : 'Static';
@@ -221,7 +224,7 @@ function CompleteContent({ uuid }: CompleteContentProps) {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-4 sm:grid-cols-3">
                                         <div className="text-center">
                                             <div className="text-2xl font-bold text-green-600">
                                                 {overallAccuracy}%
@@ -235,7 +238,15 @@ function CompleteContent({ uuid }: CompleteContentProps) {
                                                 {overallAverageRT}ms
                                             </div>
                                             <div className="text-sm text-muted-foreground">
-                                                {language === 'ja' ? '平均反応時間' : 'Average reaction time'}
+                                                {language === 'ja' ? '平均反応時間（全回答）' : 'Average RT (all responses)'}
+                                            </div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-2xl font-bold text-indigo-600">
+                                                {hasOverallAverageRTCorrectOnly ? `${overallAverageRTCorrectOnly}ms` : '—'}
+                                            </div>
+                                            <div className="text-sm text-muted-foreground">
+                                                {language === 'ja' ? '平均反応時間（正解のみ）' : 'Average RT (right answers)'}
                                             </div>
                                         </div>
                                     </div>

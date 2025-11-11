@@ -6,7 +6,7 @@ import { LanguageProvider, useLanguage } from '../../../lib/i18n';
 import { generateBlockStimuli } from '../../../lib/experiment/stimuli';
 import { saveExperiment } from '../../../lib/storage/indexeddb';
 import { syncExperimentToSupabase } from '../../../lib/storage/supabase-sync';
-import { generateStaticFeedback } from '../../../lib/experiment/utils';
+import { generateStaticFeedback, calculatePerformanceStats } from '../../../lib/experiment/utils';
 import {
     getOrGenerateFeedbackPatterns,
     generatePersonalizedBlockFeedback,
@@ -151,7 +151,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     const trialFeedbackText = useMemo(() => (
         language === 'ja'
             ? { correct: '正解', incorrect: '不正解' }
-            : { correct: 'Correct', incorrect: 'Incorrect' }
+            : { correct: 'Right', incorrect: 'Wrong' }
     ), [language]);
 
     const parsedBlockFeedback: ParsedFeedback = useMemo(() => {
@@ -384,11 +384,10 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     // ブロック完了処理
     const completeBlock = useCallback(async () => {
         // ブロック結果を計算
-        const correctTrials = currentBlockTrials.filter(t => t.isCorrect);
-        const accuracy = Math.round((correctTrials.length / currentBlockTrials.length) * 100);
-        const avgRT = correctTrials.length > 0
-            ? Math.round(correctTrials.reduce((sum, t) => sum + (t.reactionTime || 0), 0) / correctTrials.length)
-            : 0;
+        const stats = calculatePerformanceStats(currentBlockTrials);
+        const accuracy = Math.round(stats.accuracy);
+        const avgRTAll = stats.averageRT;
+        const avgRTCorrectOnly = stats.averageRTCorrectOnly;
 
         const blockResult: BlockResult = {
             id: `block-${currentBlock}`,
@@ -396,7 +395,8 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             experimentId: `${uuid}-${conditionType}`,
             trials: currentBlockTrials,
             accuracy,
-            averageRT: avgRT,
+            averageRT: avgRTAll,
+            averageRTCorrectOnly: avgRTCorrectOnly,
             completedAt: new Date(),
             feedbackShown: '' // フィードバック後に設定
         };
@@ -547,6 +547,9 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         const overallAverageRT = totalBlockCount
             ? Math.round(results.reduce((sum, b) => sum + b.averageRT, 0) / totalBlockCount)
             : 0;
+        const overallAverageRTCorrectOnly = totalBlockCount
+            ? Math.round(results.reduce((sum, b) => sum + b.averageRTCorrectOnly, 0) / totalBlockCount)
+            : 0;
 
         const experimentId = `${uuid}-${conditionType}`;
         const pendingExperimentKey = `pending-experiment-${experimentId}`;
@@ -567,6 +570,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             blocks: results,
             overallAccuracy,
             overallAverageRT,
+            overallAverageRTCorrectOnly,
             plannedTotalTrials: totalTrials,
             plannedTrialsPerBlock: trialsPerBlock,
             totalTrialsAttempted,

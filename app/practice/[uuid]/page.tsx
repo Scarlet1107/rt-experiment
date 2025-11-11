@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, use, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LanguageProvider, useLanguage } from '../../../lib/i18n';
 import { generateBlockStimuli } from '../../../lib/experiment/stimuli';
+import { calculatePerformanceStats } from '@/lib/experiment/utils';
 import { StroopStimulus, KeyCode, AnswerType } from '../../../types';
 import { experimentConfig } from '@/lib/config/experiment';
 import { Badge } from '@/components/ui/badge';
@@ -67,21 +68,23 @@ function PracticeContent({ uuid }: PracticeContentProps) {
     ], [language]);
 
     const renderColoredKeyGuide = () => (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-            {KEY_GUIDE.map(({ key, label, color }) => (
-                <div key={key} className="space-y-2">
-                    <Badge
-                        variant="outline"
-                        className="text-lg sm:text-xl font-semibold p-3 h-16 w-full flex items-center justify-center border-2 bg-white"
-                        style={{ borderColor: color, color }}
-                    >
-                        {key}
-                    </Badge>
-                    <p className="text-sm font-medium" style={{ color }}>
-                        {label}
-                    </p>
-                </div>
-            ))}
+        <div className="flex w-full justify-center">
+            <div className="grid w-[720px] max-w-full grid-cols-4 gap-6 text-center">
+                {KEY_GUIDE.map(({ key, label, color }) => (
+                    <div key={key} className="flex flex-col items-center gap-2">
+                        <Badge
+                            variant="outline"
+                            className="flex h-20 w-full items-center justify-center border-2 bg-white text-xl font-semibold tracking-widest"
+                            style={{ borderColor: color, color }}
+                        >
+                            {key}
+                        </Badge>
+                        <p className="text-sm font-medium tracking-wide" style={{ color }}>
+                            {label}
+                        </p>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 
@@ -335,18 +338,18 @@ function PracticeContent({ uuid }: PracticeContentProps) {
     }
 
     if (state === 'summary') {
-        const accuracy = results.length > 0
-            ? Math.round((results.filter(r => r.isCorrect).length / results.length) * 100)
-            : 0;
+        const stats = calculatePerformanceStats(results);
+        const accuracy = Math.round(stats.accuracy);
+        const avgRT = stats.averageRT;
 
-        const avgRT = results.filter(r => r.isCorrect && r.reactionTime).length > 0
-            ? Math.round(
-                results
-                    .filter(r => r.isCorrect && r.reactionTime)
-                    .reduce((sum, r) => sum + (r.reactionTime || 0), 0) /
-                results.filter(r => r.isCorrect && r.reactionTime).length
-            )
-            : 0;
+        const meetsAccuracyRequirement = accuracy >= 50;
+        const requirementMessage = language === 'ja'
+            ? meetsAccuracyRequirement
+                ? '十分な正答率です。このまま本番に進むことができます。'
+                : '正答率が50%未満のため、本番に進むにはもう一度練習が必要です。'
+            : meetsAccuracyRequirement
+                ? 'Great work—you can now move on to the main task.'
+                : 'Accuracy must reach at least 50% during practice before the main task unlocks.';
 
         return (
             <main className="min-h-screen bg-white text-gray-900 flex flex-col items-center justify-center px-6 py-12">
@@ -390,10 +393,15 @@ function PracticeContent({ uuid }: PracticeContentProps) {
 
                         <button
                             onClick={handleStartMainExperiment}
-                            className="px-6 py-3 text-base font-semibold text-white bg-blue-600 border-2 border-blue-600 rounded-full hover:bg-blue-700 hover:border-blue-700 transition-colors"
+                            disabled={!meetsAccuracyRequirement}
+                            className="px-6 py-3 text-base font-semibold text-white bg-blue-600 border-2 border-blue-600 rounded-full transition-colors disabled:cursor-not-allowed disabled:bg-blue-300 disabled:border-blue-300 hover:bg-blue-700 hover:border-blue-700 disabled:hover:bg-blue-300 disabled:hover:border-blue-300"
                         >
                             {t.practice.continueToMain}
                         </button>
+                    </div>
+
+                    <div className={`text-sm ${meetsAccuracyRequirement ? 'text-green-600' : 'text-red-600'}`}>
+                        {requirementMessage}
                     </div>
 
                     <div className="text-sm text-gray-500">

@@ -25,6 +25,10 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                 'ニンテンドー3DSなどで遊んだ脳トレを思い出す方もいるかもしれませんが、今回は研究目的の正式な計測です。',
                 'なるべく正確に、そして可能な限り速く回答できるよう意識してください。'
             ],
+            spotlight: {
+                title: '色に集中して答える実験です',
+                description: '原則として文字の意味よりも色に注意し、見えている色のキーを素早く押してください。無意味語だけは特例で「OTHER」を選ぶルールです。'
+            },
             examplesTitle: '例題でルールを確認',
             placeholderLabel: 'ここにスクリーンショットを配置'
         }
@@ -36,6 +40,10 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                 'If you have tried brain-training titles on handheld consoles such as the Nintendo 3DS, the format may feel familiar, but this session records research-grade data.',
                 'Strive for answers that remain both accurate and as fast as possible.'
             ],
+            spotlight: {
+                title: 'Stay focused on color, not word meaning',
+                description: 'Let the ink color guide every answer and press the matching key immediately. The only exception is nonsense words—press OTHER whenever a non-color word appears.'
+            },
             examplesTitle: 'Walkthrough Examples',
             placeholderLabel: 'Place your screenshot here'
         };
@@ -162,6 +170,14 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                         <p className="text-lg text-slate-700">
                             {copy.heroIntro}
                         </p>
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-left shadow-sm sm:text-center">
+                            <p className="text-lg font-semibold text-amber-900">
+                                {copy.spotlight.title}
+                            </p>
+                            <p className="mt-1 text-sm text-amber-800">
+                                {copy.spotlight.description}
+                            </p>
+                        </div>
                         <div className="space-y-3 text-left text-slate-700 sm:text-center">
                             {copy.heroDetails.map(detail => (
                                 <p key={detail} className="text-base leading-relaxed">
@@ -211,11 +227,11 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                             <h3 className="text-xl font-semibold text-slate-900">{t.instructions.keyMapping.title}</h3>
                             <span className="text-xs uppercase tracking-widest text-slate-400">D / F / J / K</span>
                         </div>
-                        <div className="grid gap-4">
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                             {colorMapping.map(({ key, label, bg, text }) => (
-                                <div key={key} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+                                <div key={key} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/70 p-4 sm:flex-col sm:items-start sm:gap-4 lg:flex-row">
                                     <div className="flex items-center gap-4">
-                                        <div className={`h-14 w-14 rounded-2xl ${bg} ${text} text-2xl font-bold flex items-center justify-center`}>
+                                        <div className={`flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-bold ${bg} ${text}`}>
                                             {key}
                                         </div>
                                         <div className="text-base font-semibold text-slate-900">{label}</div>

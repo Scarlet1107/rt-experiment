@@ -37,7 +37,8 @@ export interface BlockResult {
     experimentId: string;            // 所属実験ID
     trials: Trial[];                 // ブロック内の全試行
     accuracy: number;                // 正答率（0-100）
-    averageRT: number;               // 平均反応時間（正解試行のみ、ms）
+    averageRT: number;               // 平均反応時間（回答があった全試行、ms）
+    averageRTCorrectOnly: number;    // 正解試行のみの平均反応時間（ms）
     completedAt: Date;               // ブロック完了時刻
     feedbackShown?: string;          // 表示されたフィードバック内容
 }
@@ -53,7 +54,8 @@ export interface Experiment {
     completedAt?: Date;              // 実験完了時刻
     blocks: BlockResult[];           // 全ブロックの結果
     overallAccuracy?: number;        // 全体正答率
-    overallAverageRT?: number;       // 全体平均反応時間
+    overallAverageRT?: number;       // 全体平均反応時間（全回答）
+    overallAverageRTCorrectOnly?: number; // 正解のみの平均反応時間
     plannedTotalTrials?: number;     // 想定されていた総試行数
     plannedTrialsPerBlock?: number;  // 想定ブロック当たり試行数
     totalTrialsAttempted?: number;   // 実際に行った試行数
@@ -130,6 +132,7 @@ export interface ExperimentRow {
     total_trials: number;
     overall_accuracy?: number;
     overall_avg_rt?: number;
+    overall_avg_rt_correct_only?: number;
     created_at: string;
 }
 
@@ -140,6 +143,7 @@ export interface BlockRow {
     trial_count: number;
     accuracy: number;
     average_rt: number;
+    average_rt_correct_only?: number;
     feedback_shown?: string;
     completed_at: string;
     created_at: string;

@@ -55,23 +55,41 @@ export const COLOR_TO_HEX = {
 } as const;
 
 // パフォーマンス統計を計算
-export function calculatePerformanceStats(trials: { isCorrect: boolean; reactionTime: number | null }[]) {
-  const correctTrials = trials.filter(t => t.isCorrect);
-  const accuracy = trials.length > 0 ? (correctTrials.length / trials.length) * 100 : 0;
+export function calculatePerformanceStats(
+  trials: { isCorrect: boolean | null; reactionTime: number | null; responseKey?: string | null }[]
+) {
+  const totalTrials = trials.length;
+  const correctTrials = trials.filter(t => t.isCorrect === true);
+  const accuracy = totalTrials > 0 ? (correctTrials.length / totalTrials) * 100 : 0;
 
-  const validRTs = correctTrials
+  const answeredTrials = trials.filter(
+    t => typeof t.responseKey === 'string' && typeof t.reactionTime === 'number' && (t.reactionTime ?? 0) > 0
+  );
+
+  const allRTs = answeredTrials
     .map(t => t.reactionTime)
-    .filter((rt): rt is number => rt !== null && rt > 0);
+    .filter((rt): rt is number => typeof rt === 'number' && rt > 0);
+  const correctRTs = answeredTrials
+    .filter(t => t.isCorrect === true)
+    .map(t => t.reactionTime)
+    .filter((rt): rt is number => typeof rt === 'number' && rt > 0);
 
-  const cleanedRTs = removeOutliers(validRTs);
-  const averageRT = cleanedRTs.length > 0
-    ? cleanedRTs.reduce((sum, rt) => sum + rt, 0) / cleanedRTs.length
+  const cleanedAllRTs = removeOutliers(allRTs);
+  const cleanedCorrectRTs = removeOutliers(correctRTs);
+
+  const averageAll = cleanedAllRTs.length > 0
+    ? cleanedAllRTs.reduce((sum, rt) => sum + rt, 0) / cleanedAllRTs.length
+    : 0;
+
+  const averageCorrectOnly = cleanedCorrectRTs.length > 0
+    ? cleanedCorrectRTs.reduce((sum, rt) => sum + rt, 0) / cleanedCorrectRTs.length
     : 0;
 
   return {
     accuracy,
-    averageRT: Math.round(averageRT),
-    totalTrials: trials.length,
+    averageRT: Math.round(averageAll),
+    averageRTCorrectOnly: Math.round(averageCorrectOnly),
+    totalTrials,
     correctTrials: correctTrials.length
   };
 }
