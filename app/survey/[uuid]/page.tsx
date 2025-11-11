@@ -180,7 +180,7 @@ const EVALUATION_OPTIONS = {
         {
             value: 'positive-focus' as EvaluationFocus,
             title: 'Highlight positives only',
-            description: 'Keep it simple and upbeat'
+            description: 'e.g., “Nice accuracy!”'
         }
     ]
 };
@@ -626,25 +626,25 @@ function SurveyContent({ uuid }: SurveyContentProps) {
 
                                         {/* 年齢 */}
                                         <div className="space-y-2">
-                                        <Label htmlFor="age" className="flex items-center">
-                                            <Calendar className="mr-1 h-4 w-4" />
-                                            {surveyCopy.ageLabel}
-                                        </Label>
-                                        <Input
-                                            id="age"
-                                            type="number"
-                                            min="1"
-                                            max="150"
-                                            value={formData.age}
-                                            onChange={(e) => handleInputChange('age', e.target.value)}
-                                            placeholder={surveyCopy.agePlaceholder}
-                                            disabled={isSubmitting}
-                                            className={errors.age ? 'border-red-500' : ''}
-                                        />
-                                        {errors.age && (
-                                            <p className="text-sm text-red-600">{errors.age}</p>
-                                        )}
-                                    </div>
+                                            <Label htmlFor="age" className="flex items-center">
+                                                <Calendar className="mr-1 h-4 w-4" />
+                                                {surveyCopy.ageLabel}
+                                            </Label>
+                                            <Input
+                                                id="age"
+                                                type="number"
+                                                min="1"
+                                                max="150"
+                                                value={formData.age}
+                                                onChange={(e) => handleInputChange('age', e.target.value)}
+                                                placeholder={surveyCopy.agePlaceholder}
+                                                disabled={isSubmitting}
+                                                className={errors.age ? 'border-red-500' : ''}
+                                            />
+                                            {errors.age && (
+                                                <p className="text-sm text-red-600">{errors.age}</p>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* 性別 */}
