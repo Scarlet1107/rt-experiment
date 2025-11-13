@@ -268,6 +268,12 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         }
 
         const stimuli = generateBlockStimuli(trialsPerBlock);
+        console.log(`📋 ブロック${nextBlockNumber}の刺激生成完了:`, {
+            blockNumber: nextBlockNumber,
+            trialsPerBlock,
+            generatedStimuliCount: stimuli.length,
+            stimuli: stimuli.map((s, i) => `${i + 1}: ${s.word}(${s.inkColor})`)
+        });
         setBlockStimuli(stimuli);
         setCurrentTrialIndex(0);
         setCurrentBlockTrials([]);
@@ -474,8 +480,20 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
 
     // 次の試行を準備
     const prepareNextTrial = useCallback(async (stimuli: StroopStimulus[], trialIndex: number, blockNum: number) => {
+        console.log(`🎯 prepareNextTrial呼び出し: ブロック${blockNum}, 試行インデックス${trialIndex}`, {
+            trialIndex,
+            stimuliLength: stimuli.length,
+            willCompleteBlock: trialIndex >= stimuli.length,
+            currentBlockTrialsLength: currentBlockTrials.length
+        });
+
         if (trialIndex >= stimuli.length) {
             // ブロック完了
+            console.log(`🏁 ブロック${blockNum}完了 - completeBlock()呼び出し`, {
+                trialIndex,
+                stimuliLength: stimuli.length,
+                currentBlockTrialsLength: currentBlockTrials.length
+            });
             await completeBlock();
             return;
         }
@@ -487,6 +505,12 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             stimulus,
             startTime: 0 // 実際の開始時に設定
         };
+
+        console.log(`▶️ 新しい試行開始: ブロック${blockNum}, 試行${trialIndex + 1}/${stimuli.length}`, {
+            stimulus: stimulus.word,
+            inkColor: stimulus.inkColor,
+            blockId: trial.blockId
+        });
 
         setCurrentTrial(trial);
         hasRespondedRef.current = false;
@@ -506,8 +530,17 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         hasRespondedRef.current = true;
         clearTrialTimeout();
 
+        const trialId = currentBlockTrials.length + 1;
+        console.log(`⏰ タイムアウト試行記録: ブロック${currentBlock}, 試行${trialId}/${trialsPerBlock}`, {
+            currentTrialIndex,
+            currentBlockTrialsLength: currentBlockTrials.length,
+            trialId,
+            blockId: timedOutTrial.blockId,
+            stimulus: timedOutTrial.stimulus.word
+        });
+
         const trialResult: TrialResult = {
-            id: currentBlockTrials.length + 1,
+            id: trialId,
             blockId: timedOutTrial.blockId,
             stimulus: timedOutTrial.stimulus,
             responseKey: null,
@@ -517,15 +550,29 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             timestamp: new Date(),
         };
 
-        setCurrentBlockTrials(prev => [...prev, trialResult]);
+        setCurrentBlockTrials(prev => {
+            const updated = [...prev, trialResult];
+            console.log(`📊 ブロック${currentBlock}の試行配列更新（タイムアウト）:`, {
+                beforeLength: prev.length,
+                afterLength: updated.length,
+                newTrialId: trialResult.id
+            });
+            return updated;
+        });
         showTrialFeedback('incorrect');
 
         setTimeout(async () => {
             const nextIndex = currentTrialIndex + 1;
+            console.log(`⏭️ 次の試行準備（タイムアウト後）: インデックス${nextIndex} (ブロック${currentBlock})`, {
+                currentTrialIndex,
+                nextIndex,
+                stimuliLength: blockStimuli.length,
+                willCompleteBlock: nextIndex >= blockStimuli.length
+            });
             setCurrentTrialIndex(nextIndex);
             await prepareNextTrial(blockStimuli, nextIndex, currentBlock);
         }, NEXT_TRIAL_DELAY_MS);
-    }, [trialTimeLimitMs, clearTrialTimeout, currentBlockTrials.length, showTrialFeedback, currentTrialIndex, blockStimuli, currentBlock, prepareNextTrial]);
+    }, [trialTimeLimitMs, clearTrialTimeout, currentBlockTrials.length, showTrialFeedback, currentTrialIndex, blockStimuli, currentBlock, prepareNextTrial, trialsPerBlock]);
 
     trialTimeoutHandlerRef.current = handleTrialTimeout;
 
@@ -568,8 +615,20 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         const chosenAnswer = KEY_TO_ANSWER[responseKey];
         const isCorrect = chosenAnswer === currentTrial.stimulus.correctAnswer;
 
+        const trialId = currentBlockTrials.length + 1;
+        console.log(`🔍 試行記録: ブロック${currentBlock}, 試行${trialId}/${trialsPerBlock}`, {
+            currentTrialIndex,
+            currentBlockTrialsLength: currentBlockTrials.length,
+            trialId,
+            blockId: currentTrial.blockId,
+            stimulus: currentTrial.stimulus.word,
+            responseKey,
+            isCorrect,
+            reactionTime
+        });
+
         const trialResult: TrialResult = {
-            id: currentBlockTrials.length + 1,
+            id: trialId,
             blockId: currentTrial.blockId,
             stimulus: currentTrial.stimulus,
             responseKey,
@@ -579,16 +638,30 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             timestamp: new Date()
         };
 
-        setCurrentBlockTrials(prev => [...prev, trialResult]);
+        setCurrentBlockTrials(prev => {
+            const updated = [...prev, trialResult];
+            console.log(`📊 ブロック${currentBlock}の試行配列更新:`, {
+                beforeLength: prev.length,
+                afterLength: updated.length,
+                newTrialId: trialResult.id
+            });
+            return updated;
+        });
         showTrialFeedback(isCorrect ? 'correct' : 'incorrect');
 
         // 次の試行へ
         setTimeout(async () => {
             const nextIndex = currentTrialIndex + 1;
+            console.log(`⏭️ 次の試行準備: インデックス${nextIndex} (ブロック${currentBlock})`, {
+                currentTrialIndex,
+                nextIndex,
+                stimuliLength: blockStimuli.length,
+                willCompleteBlock: nextIndex >= blockStimuli.length
+            });
             setCurrentTrialIndex(nextIndex);
             await prepareNextTrial(blockStimuli, nextIndex, currentBlock);
         }, NEXT_TRIAL_DELAY_MS);
-    }, [currentTrial, hasRespondedRef, KEY_TO_ANSWER, currentBlockTrials.length, currentTrialIndex, blockStimuli, currentBlock, prepareNextTrial, showTrialFeedback, clearTrialTimeout]);
+    }, [currentTrial, hasRespondedRef, KEY_TO_ANSWER, currentBlockTrials.length, currentTrialIndex, blockStimuli, currentBlock, prepareNextTrial, showTrialFeedback, clearTrialTimeout, trialsPerBlock]);
 
     // 実験完了処理
     const completeExperiment = useCallback(async () => {
