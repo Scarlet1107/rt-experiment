@@ -99,7 +99,25 @@ function CompleteContent({ uuid }: CompleteContentProps) {
                     };
                 }, { static: false, personalized: false });
 
-                setCompletedSessions(completion);
+                setCompletedSessions(prev => ({
+                    static: prev.static || completion.static,
+                    personalized: prev.personalized || completion.personalized,
+                }));
+
+                if (typeof window !== 'undefined') {
+                    try {
+                        const storageKey = `completed-sessions-${uuid}`;
+                        const stored = window.localStorage.getItem(storageKey);
+                        const parsed = stored ? JSON.parse(stored) as Partial<SessionCompletionState> : {};
+                        const merged = {
+                            static: completion.static || Boolean(parsed.static),
+                            personalized: completion.personalized || Boolean(parsed.personalized),
+                        };
+                        window.localStorage.setItem(storageKey, JSON.stringify(merged));
+                    } catch (storageError) {
+                        console.warn('Failed to persist session completion snapshot:', storageError);
+                    }
+                }
             } catch (error) {
                 console.warn('Failed to evaluate session completion status:', error);
             }
@@ -110,6 +128,23 @@ function CompleteContent({ uuid }: CompleteContentProps) {
         return () => {
             isMounted = false;
         };
+    }, [uuid]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const storageKey = `completed-sessions-${uuid}`;
+
+        try {
+            const stored = window.localStorage.getItem(storageKey);
+            if (!stored) return;
+            const parsed = JSON.parse(stored) as Partial<SessionCompletionState>;
+            setCompletedSessions(prev => ({
+                static: prev.static || Boolean(parsed.static),
+                personalized: prev.personalized || Boolean(parsed.personalized),
+            }));
+        } catch (error) {
+            console.warn('Failed to read stored session completion flags:', error);
+        }
     }, [uuid]);
 
     const displayExperimentData = experimentData ?? pendingExperimentData;
@@ -141,6 +176,36 @@ function CompleteContent({ uuid }: CompleteContentProps) {
     const hasCompletedAllSessions = completedStaticSession && completedPersonalizedSession;
     const hasDownloadableData = Boolean(displayExperimentData);
     const shouldShowDownloadFallback = saveStatus !== 'success' && hasDownloadableData;
+
+    useEffect(() => {
+        if (!hasCurrentSessionData || typeof window === 'undefined') return;
+        const storageKey = `completed-sessions-${uuid}`;
+
+        setCompletedSessions(prev => {
+            const updated = {
+                ...prev,
+                [currentConditionType]: true,
+            };
+
+            try {
+                const stored = window.localStorage.getItem(storageKey);
+                const parsed = stored ? JSON.parse(stored) as Partial<SessionCompletionState> : {};
+                const merged = {
+                    static: updated.static || Boolean(parsed.static),
+                    personalized: updated.personalized || Boolean(parsed.personalized),
+                };
+                window.localStorage.setItem(storageKey, JSON.stringify(merged));
+
+                if (merged.static === prev.static && merged.personalized === prev.personalized) {
+                    return prev;
+                }
+                return merged;
+            } catch (error) {
+                console.warn('Failed to persist session completion state:', error);
+                return updated;
+            }
+        });
+    }, [currentConditionType, hasCurrentSessionData, uuid]);
 
     const handleDownloadData = () => {
         if (!displayExperimentData) return;

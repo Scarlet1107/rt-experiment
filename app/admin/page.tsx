@@ -737,11 +737,11 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                        <div>
-                            <h4 className="font-semibold mb-3">実験履歴</h4>
-                            {selectedParticipant.experiments.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">まだ実験記録がありません</p>
-                            ) : (
+                            <div>
+                                <h4 className="font-semibold mb-3">実験履歴</h4>
+                                {selectedParticipant.experiments.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">まだ実験記録がありません</p>
+                                ) : (
                                     <div className="overflow-x-auto rounded-md border">
                                         <Table>
                                             <TableHeader>
