@@ -113,7 +113,7 @@ const motivationDescriptionMap: Record<'ja' | 'en', Record<MotivationStyle, stri
 const evaluationDescriptionMap: Record<'ja' | 'en', Record<EvaluationFocus, string>> = {
   ja: {
     'self-progress': '過去の自分との比較で成長を伝える評価軸',
-    'social-comparison': '平均や他者との比較で優位性を示す評価軸',
+    'social-comparison': '平均や他者との比較で優位性を示す評価軸(事実に基づかない誇張も認める)',
     'positive-focus': '良かった部分だけをシンプルに褒める評価軸'
   },
   en: {
@@ -167,6 +167,7 @@ const JAPANESE_PROMPT = `
 - {tonePreferenceDescription} で書き、{motivationStyleDescription} のテンションで励ます
 - 褒める視点は {evaluationFocusDescription} を中心にする
 - ポジティブで励ましの内容、ネガティブな表現は避ける
+- 成績が伸び悩んでいる場合でも特に触れず、前向きな表現にする
 
 JSON形式で以下の構造を返してください（各配列は必ず3件）:
 {
@@ -193,6 +194,7 @@ Participant Information:
 - Motivation style: {motivationStyleDescription}
 - Evaluation focus: {evaluationFocusDescription}
 - Always use the preferred name exactly as provided (same spelling/casing, no transliteration or honorifics)
+- Even if performance is stagnant, do not mention it; keep the tone positive and forward-looking
 
 These messages should explicitly aim to boost the participant's motivation within the ongoing experiment context. Unless the participant explicitly asked for otherwise, favor enthusiastic praise over sober, factual analysis. Highlight improvements in reaction speed and accuracy first whenever possible.
 Generate three short (10-20 words) feedback messages for each of the following 11 scenarios (keep the JSON keys exactly as listed):

@@ -303,7 +303,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                 }
             }
 
-                setStartStatusMessage(language === 'ja' ? '実験をセットアップしています…' : 'Configuring experiment…');
+            setStartStatusMessage(language === 'ja' ? '実験をセットアップしています…' : 'Configuring experiment…');
             startNewBlock();
             setStartStatusMessage(null);
         } catch (error) {
@@ -389,10 +389,11 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         const avgRTAll = stats.averageRT;
         const avgRTCorrectOnly = stats.averageRTCorrectOnly;
 
+        const experimentId = `${uuid}-${conditionType}`;
         const blockResult: BlockResult = {
-            id: `block-${currentBlock}`,
+            id: `${experimentId}-block-${currentBlock}`,
             blockNumber: currentBlock,
-            experimentId: `${uuid}-${conditionType}`,
+            experimentId,
             trials: currentBlockTrials,
             accuracy,
             averageRT: avgRTAll,
@@ -786,13 +787,13 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                                     <Clock className="h-4 w-4 text-amber-600" />
                                     <AlertTitle>
                                         {language === 'ja'
-                                            ? 'フィードバック生成には約10秒かかります'
-                                            : 'Personalized feedback takes about 10 seconds'}
+                                            ? '実験開始ボタンを押してから10秒程度時間がかかる場合があります'
+                                            : 'After pressing Start, it may take about 10 seconds'}
                                     </AlertTitle>
                                     <AlertDescription>
                                         {language === 'ja'
-                                            ? 'パーソナライズされたフィードバックを準備するため、開始直後に通常10秒程度の処理時間が発生します。メッセージが表示されるまでそのままお待ちください。'
-                                            : 'Generating your personalized feedback usually takes around 10 seconds when the experiment begins. Please stay on this screen until the message disappears.'}
+                                            ? 'フィードバックを準備している間は画面を閉じず、そのままお待ちください。'
+                                            : 'Please keep this window open while we prepare your feedback.'}
                                     </AlertDescription>
                                 </Alert>
                             )}

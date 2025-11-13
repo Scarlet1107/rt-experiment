@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export function middleware(request: NextRequest) {
     // 管理者パス(/admin)のみBasic認証を適用
-    if (request.nextUrl.pathname.startsWith('/admin')) {
+    if (request.nextUrl.pathname.startsWith('/admin') || request.nextUrl.pathname === '/') {
         const basicAuth = request.headers.get('authorization');
 
         if (!basicAuth) {
@@ -41,5 +41,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: '/admin/:path*',
+    matcher: ['/admin/:path*', '/'],
 };

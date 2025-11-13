@@ -19,7 +19,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye } from 'lucide-react';
+import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye, BarChart3 } from 'lucide-react';
 import type { TonePreference, MotivationStyle, EvaluationFocus } from '@/types';
 import { experimentConfig } from '@/lib/config/experiment';
 
@@ -479,6 +479,12 @@ export default function AdminDashboard() {
                             <Link href="/">
                                 <Home className="mr-2 h-4 w-4" />
                                 ホームに戻る
+                            </Link>
+                        </Button>
+                        <Button variant="secondary" asChild>
+                            <Link href="/admin/results">
+                                <BarChart3 className="mr-2 h-4 w-4" />
+                                成果分析ビュー
                             </Link>
                         </Button>
                         <Button onClick={handleCreateParticipant} disabled={creating}>
