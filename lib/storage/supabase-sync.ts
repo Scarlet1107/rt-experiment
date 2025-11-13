@@ -1,5 +1,4 @@
 import { supabase } from '../../utils/supabase/client';
-import { v5 as uuidv5 } from 'uuid';
 import {
     ParticipantRow,
     ExperimentRow,
@@ -14,8 +13,6 @@ import {
     updateSyncStatus,
     getPendingSyncExperiments
 } from './indexeddb';
-
-const TRIAL_UUID_NAMESPACE = 'f5f0f5c2-4c70-4c4d-8de5-e6a0c97c7c1f';
 
 /**
  * 実験データをSupabaseに同期
@@ -128,7 +125,7 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
                 console.log(`試行 ${trialIndex + 1}/${block.trials.length} 処理開始 (ID: ${trial.id})`);
 
                 const trialRow: Omit<TrialRow, 'created_at'> = {
-                    id: `${trial.blockId}-${trial.id}`,
+                    id: `${trial.blockId}-trial-${trial.id}`,
                     block_id: trial.blockId,
                     trial_number: trial.id,
                     word: trial.stimulus.word,
@@ -137,7 +134,7 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
                     is_congruent: trial.stimulus.isCongruent,
                     response_key: trial.responseKey || undefined,
                     chosen_answer: trial.chosenAnswer || undefined,
-                    is_correct: trial.isCorrect || undefined,
+                    is_correct: trial.isCorrect !== null ? trial.isCorrect : undefined, // false値を保持
                     reaction_time: trial.reactionTime || undefined,
                     timestamp: trial.timestamp.toISOString(),
                 };
@@ -147,6 +144,9 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
                     word: trialRow.word,
                     inkColor: trialRow.ink_color,
                     isCorrect: trialRow.is_correct,
+                    isCorrectType: typeof trialRow.is_correct,
+                    originalIsCorrect: trial.isCorrect,
+                    originalIsCorrectType: typeof trial.isCorrect,
                     reactionTime: trialRow.reaction_time
                 });
 

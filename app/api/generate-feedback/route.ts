@@ -144,7 +144,6 @@ const JAPANESE_PROMPT = `
 - 望む口調タイプ: {tonePreferenceDescription}
 - 励まし方のスタイル: {motivationStyleDescription}
 - 評価で重視したいポイント: {evaluationFocusDescription}
-- 呼び名は出力でも入力時と全く同じ綴りで記載し、カタカナ化や漢字化、敬称の付与は絶対にしない
 
 このフィードバックは特定の実験で参加者のモチベーションを高めることを目的としています。事実に基づく冷静な分析よりも、ユーザーを全力で褒め称えるトーンを優先してください（ユーザーが別途指定した場合を除く）。特に反応速度や正答率が良くなった点を中心に褒めるようにしてください。
 以下の11パターンごとに、30~50文字のフィードバック文を3種類ずつ生成してください(キー名は必ずそのまま使用):
@@ -168,6 +167,7 @@ const JAPANESE_PROMPT = `
 - 褒める視点は {evaluationFocusDescription} を中心にする
 - ポジティブで励ましの内容、ネガティブな表現は避ける
 - 成績が伸び悩んでいる場合でも特に触れず、前向きな表現にする
+- 呼び名は出力でも入力時と全く同じ綴りで記載し、カタカナ化や漢字化、敬称の付与は絶対にしない
 
 JSON形式で以下の構造を返してください（各配列は必ず3件）:
 {
@@ -193,7 +193,6 @@ Participant Information:
 - Preferred tone: {tonePreferenceDescription}
 - Motivation style: {motivationStyleDescription}
 - Evaluation focus: {evaluationFocusDescription}
-- Always use the preferred name exactly as provided (same spelling/casing, no transliteration or honorifics)
 - Even if performance is stagnant, do not mention it; keep the tone positive and forward-looking
 
 These messages should explicitly aim to boost the participant's motivation within the ongoing experiment context. Unless the participant explicitly asked for otherwise, favor enthusiastic praise over sober, factual analysis. Highlight improvements in reaction speed and accuracy first whenever possible.
@@ -217,6 +216,7 @@ Constraints:
 - Write using {tonePreferenceDescription} and the energy of {motivationStyleDescription}
 - Praise primarily through {evaluationFocusDescription}
 - Keep it positive and encouraging; avoid negative wording
+- Always use the preferred name exactly as provided (same spelling/casing, no transliteration or honorifics)
 
 Output JSON with this structure (each array must contain exactly 3 messages):
 {
