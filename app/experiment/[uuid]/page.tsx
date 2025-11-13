@@ -4,8 +4,8 @@ import { useState, useEffect, useRef, use, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LanguageProvider, useLanguage } from '../../../lib/i18n';
 import { generateBlockStimuli } from '../../../lib/experiment/stimuli';
-import { saveExperiment } from '../../../lib/storage/indexeddb';
-import { syncExperimentToSupabase } from '../../../lib/storage/supabase-sync';
+import { saveExperiment, getParticipant, saveParticipant } from '../../../lib/storage/indexeddb';
+import { syncExperimentToSupabase, getParticipantFromSupabase } from '../../../lib/storage/supabase-sync';
 import { generateStaticFeedback, calculatePerformanceStats } from '../../../lib/experiment/utils';
 import {
     getOrGenerateFeedbackPatterns,
@@ -13,8 +13,7 @@ import {
     type FeedbackPattern,
     type ParticipantInfo
 } from '../../../lib/feedback/personalized';
-import { getParticipant } from '../../../lib/storage/indexeddb';
-import { StroopStimulus, KeyCode, AnswerType, Trial, BlockResult, Experiment } from '../../../types';
+import { StroopStimulus, KeyCode, AnswerType, Trial, BlockResult, Experiment, TonePreference, MotivationStyle, EvaluationFocus } from '../../../types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +53,33 @@ const fromLocalStorage = (key: string): ParticipantInfo | null => {
         return null;
     }
 };
+
+const storageKeyForParticipant = (uuid: string) => `participant-${uuid}`;
+
+const persistParticipantInfoLocally = (uuid: string, participant: ParticipantInfo) => {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem(storageKeyForParticipant(uuid), JSON.stringify(participant));
+    } catch (error) {
+        console.warn('Failed to cache participant info in localStorage:', error);
+    }
+};
+
+const mapSupabaseParticipantToIndexedDB = (record: any) => ({
+    id: record.id,
+    name: record.name ?? '',
+    studentId: record.student_id ?? '',
+    handedness: record.handedness ?? '',
+    age: typeof record.age === 'number' ? record.age : 0,
+    gender: record.gender ?? '',
+    nickname: record.nickname ?? '',
+    preferredPraise: record.preferred_praise ?? '',
+    tonePreference: (record.tone_preference as TonePreference) || 'gentle',
+    motivationStyle: (record.motivation_style as MotivationStyle) || 'empathetic',
+    evaluationFocus: (record.evaluation_focus as EvaluationFocus) || 'self-progress',
+    language: (record.language as 'ja' | 'en') || 'ja',
+    createdAt: record.created_at ? new Date(record.created_at) : new Date(),
+});
 
 // 実験の状態管理
 type ExperimentState = 'preparation' | 'countdown' | 'running' | 'feedback' | 'completed';
@@ -265,10 +291,31 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             console.error('Failed to load participant from IndexedDB:', error);
         }
 
-        const localInfo = fromLocalStorage(`participant-${uuid}`);
+        const localInfo = fromLocalStorage(storageKeyForParticipant(uuid));
         if (localInfo) {
             setParticipantInfo(localInfo);
             return localInfo;
+        }
+
+        try {
+            const remoteRecord = await getParticipantFromSupabase(uuid);
+            if (remoteRecord) {
+                const normalized = mapSupabaseParticipantToIndexedDB(remoteRecord);
+                const info = toParticipantInfo(normalized);
+
+                if (info) {
+                    setParticipantInfo(info);
+                    persistParticipantInfoLocally(uuid, info);
+                    try {
+                        await saveParticipant(normalized);
+                    } catch (storageError) {
+                        console.warn('Failed to persist participant into IndexedDB:', storageError);
+                    }
+                    return info;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch participant from Supabase:', error);
         }
 
         return null;
