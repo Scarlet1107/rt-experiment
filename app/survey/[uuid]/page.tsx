@@ -209,6 +209,9 @@ function SurveyContent({ uuid }: SurveyContentProps) {
     const genderLabels = language === 'ja'
         ? { male: '男性', female: '女性', other: 'その他' }
         : { male: 'Male', female: 'Female', other: 'Other' };
+    const handednessLabels = language === 'ja'
+        ? { right: '右利き', left: '左利き', other: 'その他・回答しない' }
+        : { right: 'Right-handed', left: 'Left-handed', other: 'Other / Prefer not to say' };
     const savingLabel = language === 'ja' ? '保存中...' : 'Saving...';
     const multiSelectNote = language === 'ja' ? '（複数選択可）' : '(Multiple selections)';
     const selectedLabel = language === 'ja' ? '選択済み' : 'Selected';
@@ -217,6 +220,16 @@ function SurveyContent({ uuid }: SurveyContentProps) {
     const checkingLabel = language === 'ja' ? 'プロフィールを確認しています...' : 'Checking existing profile...';
     const continueLabel = language === 'ja' ? 'この情報で続行' : 'Continue with this profile';
     const updateLabel = language === 'ja' ? '回答を更新する' : 'Update responses';
+    const summaryHandedness = useMemo(() => {
+        const key = existingParticipant?.handedness as SurveyFormData['handedness'] | undefined;
+        if (!key) return '-';
+        return handednessLabels[key] ?? key;
+    }, [existingParticipant?.handedness, handednessLabels]);
+    const summaryGender = useMemo(() => {
+        const key = existingParticipant?.gender as SurveyFormData['gender'] | undefined;
+        if (!key) return '-';
+        return genderLabels[key] ?? key;
+    }, [existingParticipant?.gender, genderLabels]);
     const surveyCopy = useMemo(() => ({
         existingTitle: language === 'ja' ? '事前ヒアリング済み' : 'Profile already completed',
         existingDescription: language === 'ja'
@@ -480,11 +493,11 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                 </div>
                                 <div>
                                     <p className="text-sm text-muted-foreground">{surveyCopy.summaryLabels.handedness}</p>
-                                    <p className="font-semibold">{existingParticipant.handedness || '-'}</p>
+                                    <p className="font-semibold">{summaryHandedness}</p>
                                 </div>
                                 <div>
                                     <p className="text-sm text-muted-foreground">{surveyCopy.summaryLabels.gender}</p>
-                                    <p className="font-semibold">{existingParticipant.gender || '-'}</p>
+                                    <p className="font-semibold">{summaryGender}</p>
                                 </div>
                                 <div className="md:col-span-2">
                                     <p className="text-sm text-muted-foreground">{surveyCopy.summaryLabels.praise}</p>
