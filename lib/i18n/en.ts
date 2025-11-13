@@ -64,8 +64,8 @@ Press the corresponding key for the displayed text color as quickly and accurate
         title: "Practice",
         description: "Let's start with practice. Once you're comfortable, proceed to the main experiment.",
         trial: "Practice",
-        correct: "Correct",
-        incorrect: "Incorrect",
+        correct: "Right",
+        incorrect: "Wrong",
         continueToMain: "Start Main Experiment",
         continePractice: "Continue Practice"
     },
@@ -73,8 +73,8 @@ Press the corresponding key for the displayed text color as quickly and accurate
     experiment: {
         block: "Block",
         trial: "Trial",
-        correct: "Correct",
-        incorrect: "Incorrect",
+        correct: "Right",
+        incorrect: "Wrong",
         break: "Break",
         breakMessage: "Great job! Please take a short break. When ready, proceed to the next block.",
         continue: "Next Block"

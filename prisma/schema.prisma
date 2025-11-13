@@ -69,35 +69,37 @@ model Participant {
 }
 
 model Experiment {
-    id              String        @id @default(uuid())
-    participant     Participant   @relation(fields: [participantId], references: [id], onDelete: Cascade)
-    participantId   String        @map("participant_id")
-    conditionType   ConditionType @map("condition_type")
-    sessionNumber   Int           @default(1) @map("session_number")
-    startedAt       DateTime      @map("started_at")
-    completedAt     DateTime?     @map("completed_at")
-    totalTrials     Int           @default(0) @map("total_trials")
-    overallAccuracy Float?        @map("overall_accuracy")
-    overallAvgRt    Float?        @map("overall_avg_rt")
-    createdAt       DateTime      @default(now()) @map("created_at")
-    blocks          Block[]
+    id                      String        @id @default(uuid())
+    participant             Participant   @relation(fields: [participantId], references: [id], onDelete: Cascade)
+    participantId           String        @map("participant_id")
+    conditionType           ConditionType @map("condition_type")
+    sessionNumber           Int           @default(1) @map("session_number")
+    startedAt               DateTime      @map("started_at")
+    completedAt             DateTime?     @map("completed_at")
+    totalTrials             Int           @default(0) @map("total_trials")
+    overallAccuracy         Float?        @map("overall_accuracy")
+    overallAvgRt            Float?        @map("overall_avg_rt")
+    overallAvgRtCorrectOnly Float?        @map("overall_avg_rt_correct_only")
+    createdAt               DateTime      @default(now()) @map("created_at")
+    blocks                  Block[]
 
     @@index([participantId])
     @@map("experiments")
 }
 
 model Block {
-    id            String     @id @default(uuid())
-    experiment    Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
-    experimentId  String     @map("experiment_id")
-    blockNumber   Int        @map("block_number")
-    trialCount    Int        @default(0) @map("trial_count")
-    accuracy      Float?     @map("accuracy")
-    averageRt     Float?     @map("average_rt")
-    feedbackShown String?    @map("feedback_shown")
-    completedAt   DateTime?  @map("completed_at")
-    createdAt     DateTime   @default(now()) @map("created_at")
-    trials        Trial[]
+    id                   String     @id @default(uuid())
+    experiment           Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+    experimentId         String     @map("experiment_id")
+    blockNumber          Int        @map("block_number")
+    trialCount           Int        @default(0) @map("trial_count")
+    accuracy             Float?     @map("accuracy")
+    averageRt            Float?     @map("average_rt")
+    averageRtCorrectOnly Float?     @map("average_rt_correct_only")
+    feedbackShown        String?    @map("feedback_shown")
+    completedAt          DateTime?  @map("completed_at")
+    createdAt            DateTime   @default(now()) @map("created_at")
+    trials               Trial[]
 
     @@index([experimentId])
     @@map("blocks")

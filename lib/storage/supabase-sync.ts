@@ -40,6 +40,7 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
             total_trials: experiment.blocks.reduce((sum, block) => sum + block.trials.length, 0),
             overall_accuracy: experiment.overallAccuracy,
             overall_avg_rt: experiment.overallAverageRT,
+            overall_avg_rt_correct_only: experiment.overallAverageRTCorrectOnly,
         };
 
         const { error: expError } = await supabase
@@ -57,6 +58,7 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
                 trial_count: block.trials.length,
                 accuracy: block.accuracy,
                 average_rt: block.averageRT,
+                average_rt_correct_only: block.averageRTCorrectOnly,
                 feedback_shown: block.feedbackShown,
                 completed_at: block.completedAt.toISOString(),
             };

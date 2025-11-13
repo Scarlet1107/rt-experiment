@@ -3,12 +3,11 @@
 import { useState, useEffect, use } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { LanguageProvider, useLanguage } from '../../../lib/i18n';
-import { getExperiment } from '../../../lib/storage';
+import { getExperiment, getExperimentsByParticipant } from '../../../lib/storage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle, Download, Calendar, Clock, Target, AlertCircle } from 'lucide-react';
+import { CheckCircle, Download, Clock, Target, AlertCircle } from 'lucide-react';
 import { experimentConfig } from '@/lib/config/experiment';
 import type { Experiment } from '@/types';
 
@@ -17,6 +16,7 @@ interface CompleteContentProps {
 }
 
 type SaveStatus = 'success' | 'local-only' | 'failed';
+type SessionCompletionState = Record<'static' | 'personalized', boolean>;
 
 function CompleteContent({ uuid }: CompleteContentProps) {
     const { language } = useLanguage();
@@ -31,6 +31,10 @@ function CompleteContent({ uuid }: CompleteContentProps) {
     const [pendingExperimentData, setPendingExperimentData] = useState<Experiment | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [completedSessions, setCompletedSessions] = useState<SessionCompletionState>({
+        static: false,
+        personalized: false
+    });
 
     useEffect(() => {
         const experimentId = `${uuid}-${condition}`;
@@ -73,6 +77,76 @@ function CompleteContent({ uuid }: CompleteContentProps) {
         }
     }, [condition, saveStatus, uuid]);
 
+    useEffect(() => {
+        let isMounted = true;
+
+        const evaluateSessionCompletion = async () => {
+            try {
+                const records = await getExperimentsByParticipant(uuid);
+                if (!isMounted) return;
+
+                const completion = records.reduce<SessionCompletionState>((acc, record) => {
+                    const conditionType = record?.experiment?.conditionType;
+                    const isCompleted = Boolean(record?.experiment?.completedAt);
+
+                    if (!conditionType || !isCompleted) {
+                        return acc;
+                    }
+
+                    return {
+                        ...acc,
+                        [conditionType]: true
+                    };
+                }, { static: false, personalized: false });
+
+                setCompletedSessions(prev => ({
+                    static: prev.static || completion.static,
+                    personalized: prev.personalized || completion.personalized,
+                }));
+
+                if (typeof window !== 'undefined') {
+                    try {
+                        const storageKey = `completed-sessions-${uuid}`;
+                        const stored = window.localStorage.getItem(storageKey);
+                        const parsed = stored ? JSON.parse(stored) as Partial<SessionCompletionState> : {};
+                        const merged = {
+                            static: completion.static || Boolean(parsed.static),
+                            personalized: completion.personalized || Boolean(parsed.personalized),
+                        };
+                        window.localStorage.setItem(storageKey, JSON.stringify(merged));
+                    } catch (storageError) {
+                        console.warn('Failed to persist session completion snapshot:', storageError);
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to evaluate session completion status:', error);
+            }
+        };
+
+        evaluateSessionCompletion();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [uuid]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const storageKey = `completed-sessions-${uuid}`;
+
+        try {
+            const stored = window.localStorage.getItem(storageKey);
+            if (!stored) return;
+            const parsed = JSON.parse(stored) as Partial<SessionCompletionState>;
+            setCompletedSessions(prev => ({
+                static: prev.static || Boolean(parsed.static),
+                personalized: prev.personalized || Boolean(parsed.personalized),
+            }));
+        } catch (error) {
+            console.warn('Failed to read stored session completion flags:', error);
+        }
+    }, [uuid]);
+
     const displayExperimentData = experimentData ?? pendingExperimentData;
 
     const plannedTotalTrials = displayExperimentData?.plannedTotalTrials ?? totalTrials;
@@ -91,12 +165,47 @@ function CompleteContent({ uuid }: CompleteContentProps) {
     const completedBlocks = displayExperimentData?.blocks.length ?? 0;
     const overallAccuracy = displayExperimentData?.overallAccuracy ?? 0;
     const overallAverageRT = displayExperimentData?.overallAverageRT ?? 0;
+    const rawOverallAverageRTCorrectOnly = displayExperimentData?.overallAverageRTCorrectOnly;
+    const hasOverallAverageRTCorrectOnly = typeof rawOverallAverageRTCorrectOnly === 'number' && !Number.isNaN(rawOverallAverageRTCorrectOnly);
+    const overallAverageRTCorrectOnly = hasOverallAverageRTCorrectOnly ? rawOverallAverageRTCorrectOnly : 0;
     const completedAt = displayExperimentData?.completedAt ? new Date(displayExperimentData.completedAt) : null;
-    const sessionNumber = displayExperimentData?.sessionNumber ?? (condition === 'personalized' ? 2 : 1);
-    const conditionLabel = (displayExperimentData?.conditionType || condition) === 'personalized' ? 'Personalized' : 'Static';
-    const conditionBadgeVariant = (displayExperimentData?.conditionType || condition) === 'personalized' ? 'default' : 'secondary';
+    const currentConditionType = (displayExperimentData?.conditionType || condition) as 'static' | 'personalized';
+    const hasCurrentSessionData = Boolean(displayExperimentData);
+    const completedStaticSession = completedSessions.static || (hasCurrentSessionData && currentConditionType === 'static');
+    const completedPersonalizedSession = completedSessions.personalized || (hasCurrentSessionData && currentConditionType === 'personalized');
+    const hasCompletedAllSessions = completedStaticSession && completedPersonalizedSession;
     const hasDownloadableData = Boolean(displayExperimentData);
     const shouldShowDownloadFallback = saveStatus !== 'success' && hasDownloadableData;
+
+    useEffect(() => {
+        if (!hasCurrentSessionData || typeof window === 'undefined') return;
+        const storageKey = `completed-sessions-${uuid}`;
+
+        setCompletedSessions(prev => {
+            const updated = {
+                ...prev,
+                [currentConditionType]: true,
+            };
+
+            try {
+                const stored = window.localStorage.getItem(storageKey);
+                const parsed = stored ? JSON.parse(stored) as Partial<SessionCompletionState> : {};
+                const merged = {
+                    static: updated.static || Boolean(parsed.static),
+                    personalized: updated.personalized || Boolean(parsed.personalized),
+                };
+                window.localStorage.setItem(storageKey, JSON.stringify(merged));
+
+                if (merged.static === prev.static && merged.personalized === prev.personalized) {
+                    return prev;
+                }
+                return merged;
+            } catch (error) {
+                console.warn('Failed to persist session completion state:', error);
+                return updated;
+            }
+        });
+    }, [currentConditionType, hasCurrentSessionData, uuid]);
 
     const handleDownloadData = () => {
         if (!displayExperimentData) return;
@@ -212,7 +321,7 @@ function CompleteContent({ uuid }: CompleteContentProps) {
                     </Card>
                 ) : (
                     <>
-                        <div className="grid gap-6 md:grid-cols-2">
+                        <div className="grid gap-6">
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="flex items-center">
@@ -221,7 +330,7 @@ function CompleteContent({ uuid }: CompleteContentProps) {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-4 sm:grid-cols-3">
                                         <div className="text-center">
                                             <div className="text-2xl font-bold text-green-600">
                                                 {overallAccuracy}%
@@ -235,7 +344,15 @@ function CompleteContent({ uuid }: CompleteContentProps) {
                                                 {overallAverageRT}ms
                                             </div>
                                             <div className="text-sm text-muted-foreground">
-                                                {language === 'ja' ? '平均反応時間' : 'Average reaction time'}
+                                                {language === 'ja' ? '平均反応時間（全回答）' : 'Average RT (all responses)'}
+                                            </div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-2xl font-bold text-indigo-600">
+                                                {hasOverallAverageRTCorrectOnly ? `${overallAverageRTCorrectOnly}ms` : '—'}
+                                            </div>
+                                            <div className="text-sm text-muted-foreground">
+                                                {language === 'ja' ? '平均反応時間（正解のみ）' : 'Average RT (right answers)'}
                                             </div>
                                         </div>
                                     </div>
@@ -254,49 +371,6 @@ function CompleteContent({ uuid }: CompleteContentProps) {
                                                 {language === 'ja' ? '完了ブロック:' : 'Blocks completed:'}
                                             </span>
                                             <span className="font-medium">{completedBlocks}/{blockGoalDisplay}</span>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center">
-                                        <Calendar className="mr-2 h-5 w-5" />
-                                        {language === 'ja' ? '実験情報' : 'Experiment details'}
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="space-y-3 text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">
-                                                {language === 'ja' ? '実験条件:' : 'Condition:'}
-                                            </span>
-                                            <Badge variant={conditionBadgeVariant}>{conditionLabel}</Badge>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">
-                                                {language === 'ja' ? 'セッション番号:' : 'Session number:'}
-                                            </span>
-                                            <span className="font-medium">{sessionNumber}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">
-                                                {language === 'ja' ? '完了日時:' : 'Completed at:'}
-                                            </span>
-                                            <span className="font-medium">
-                                                {completedAt
-                                                    ? `${completedAt.toLocaleDateString('ja-JP')} ${completedAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`
-                                                    : '-'}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">
-                                                {language === 'ja' ? '参加者ID:' : 'Participant ID:'}
-                                            </span>
-                                            <code className="text-xs bg-muted px-2 py-1 rounded">
-                                                {uuid.slice(0, 8)}...
-                                            </code>
                                         </div>
                                     </div>
                                 </CardContent>
@@ -329,23 +403,7 @@ function CompleteContent({ uuid }: CompleteContentProps) {
                                     </div>
                                 </div>
 
-                                {sessionNumber === 1 ? (
-                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                        <div className="flex items-start space-x-3">
-                                            <Clock className="h-5 w-5 text-blue-600 mt-0.5" />
-                                            <div className="space-y-2">
-                                                <h3 className="font-medium text-blue-900">
-                                                    {language === 'ja' ? 'セッション2のご案内' : 'Preparing for session 2'}
-                                                </h3>
-                                                <p className="text-sm text-blue-800">
-                                                    {language === 'ja'
-                                                        ? '最低1日間隔を空けてから、セッション2（異なる条件での実験）にご参加ください。セッション2のURLは別途お送りいたします。'
-                                                        : 'Please leave at least one day between sessions before joining session 2 (the alternate condition). We will send the session 2 link separately.'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : (
+                                {hasCompletedAllSessions ? (
                                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                                         <div className="flex items-start space-x-3">
                                             <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
@@ -357,6 +415,22 @@ function CompleteContent({ uuid }: CompleteContentProps) {
                                                     {language === 'ja'
                                                         ? '全ての実験セッションが完了しました。ご協力いただき、誠にありがとうございました。研究結果は学術発表にて公表予定です。'
                                                         : 'You have completed every session—thank you so much for your time. Findings will be shared in future academic publications.'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                        <div className="flex items-start space-x-3">
+                                            <Clock className="h-5 w-5 text-blue-600 mt-0.5" />
+                                            <div className="space-y-2">
+                                                <h3 className="font-medium text-blue-900">
+                                                    {language === 'ja' ? 'セッション2のご案内' : 'Preparing for session 2'}
+                                                </h3>
+                                                <p className="text-sm text-blue-800">
+                                                    {language === 'ja'
+                                                        ? '最低1日間隔を空けてから、セッション2（異なる条件での実験）にご参加ください。セッション2のURLは別途お送りいたします。'
+                                                        : 'Please leave at least one day between sessions before joining session 2 (the alternate condition). We will send the session 2 link separately.'}
                                                 </p>
                                             </div>
                                         </div>

@@ -6,7 +6,7 @@ import { LanguageProvider, useLanguage } from '../../../lib/i18n';
 import { generateBlockStimuli } from '../../../lib/experiment/stimuli';
 import { saveExperiment } from '../../../lib/storage/indexeddb';
 import { syncExperimentToSupabase } from '../../../lib/storage/supabase-sync';
-import { generateStaticFeedback } from '../../../lib/experiment/utils';
+import { generateStaticFeedback, calculatePerformanceStats } from '../../../lib/experiment/utils';
 import {
     getOrGenerateFeedbackPatterns,
     generatePersonalizedBlockFeedback,
@@ -77,6 +77,7 @@ interface ParsedFeedback {
 
 const NEXT_TRIAL_DELAY_MS = 500;
 const TRIAL_FEEDBACK_DURATION_MS = NEXT_TRIAL_DELAY_MS;
+const FEEDBACK_ACTION_DELAY_MS = 3000;
 
 function ExperimentContent({ uuid }: ExperimentContentProps) {
     const router = useRouter();
@@ -121,6 +122,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     const [isPreparingExperiment, setIsPreparingExperiment] = useState(false);
     const [startStatusMessage, setStartStatusMessage] = useState<string | null>(null);
     const [startError, setStartError] = useState<string | null>(null);
+    const [isFeedbackActionAvailable, setIsFeedbackActionAvailable] = useState(false);
 
     // キー入力管理
     const trialStartRef = useRef<number>(0);
@@ -132,6 +134,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     const trialFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const trialTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const trialTimeoutHandlerRef = useRef<(trial: CurrentTrial) => void>(() => { });
+    const feedbackActionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // キー対応表
     const KEY_TO_ANSWER: Record<KeyCode, AnswerType> = useMemo(() => ({
@@ -151,7 +154,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     const trialFeedbackText = useMemo(() => (
         language === 'ja'
             ? { correct: '正解', incorrect: '不正解' }
-            : { correct: 'Correct', incorrect: 'Incorrect' }
+            : { correct: 'Right', incorrect: 'Wrong' }
     ), [language]);
 
     const parsedBlockFeedback: ParsedFeedback = useMemo(() => {
@@ -196,6 +199,13 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         if (feedbackTimerRef.current) {
             clearInterval(feedbackTimerRef.current);
             feedbackTimerRef.current = null;
+        }
+    }, []);
+
+    const clearFeedbackActionTimer = useCallback(() => {
+        if (feedbackActionTimerRef.current) {
+            clearTimeout(feedbackActionTimerRef.current);
+            feedbackActionTimerRef.current = null;
         }
     }, []);
 
@@ -296,14 +306,14 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                     return;
                 }
 
-                setStartStatusMessage(language === 'ja' ? 'フィードバックを準備しています…' : 'Preparing feedback…');
+                setStartStatusMessage(language === 'ja' ? '追加の初期設定を行っています…' : 'Finalizing setup…');
                 if (!feedbackPatterns) {
                     const patterns = await getOrGenerateFeedbackPatterns(info);
                     setFeedbackPatterns(patterns);
                 }
             }
 
-                setStartStatusMessage(language === 'ja' ? '実験をセットアップしています…' : 'Configuring experiment…');
+            setStartStatusMessage(language === 'ja' ? '実験をセットアップしています…' : 'Configuring experiment…');
             startNewBlock();
             setStartStatusMessage(null);
         } catch (error) {
@@ -384,19 +394,20 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     // ブロック完了処理
     const completeBlock = useCallback(async () => {
         // ブロック結果を計算
-        const correctTrials = currentBlockTrials.filter(t => t.isCorrect);
-        const accuracy = Math.round((correctTrials.length / currentBlockTrials.length) * 100);
-        const avgRT = correctTrials.length > 0
-            ? Math.round(correctTrials.reduce((sum, t) => sum + (t.reactionTime || 0), 0) / correctTrials.length)
-            : 0;
+        const stats = calculatePerformanceStats(currentBlockTrials);
+        const accuracy = Math.round(stats.accuracy);
+        const avgRTAll = stats.averageRT;
+        const avgRTCorrectOnly = stats.averageRTCorrectOnly;
 
+        const experimentId = `${uuid}-${conditionType}`;
         const blockResult: BlockResult = {
-            id: `block-${currentBlock}`,
+            id: `${experimentId}-block-${currentBlock}`,
             blockNumber: currentBlock,
-            experimentId: `${uuid}-${conditionType}`,
+            experimentId,
             trials: currentBlockTrials,
             accuracy,
-            averageRT: avgRT,
+            averageRT: avgRTAll,
+            averageRTCorrectOnly: avgRTCorrectOnly,
             completedAt: new Date(),
             feedbackShown: '' // フィードバック後に設定
         };
@@ -547,6 +558,9 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         const overallAverageRT = totalBlockCount
             ? Math.round(results.reduce((sum, b) => sum + b.averageRT, 0) / totalBlockCount)
             : 0;
+        const overallAverageRTCorrectOnly = totalBlockCount
+            ? Math.round(results.reduce((sum, b) => sum + b.averageRTCorrectOnly, 0) / totalBlockCount)
+            : 0;
 
         const experimentId = `${uuid}-${conditionType}`;
         const pendingExperimentKey = `pending-experiment-${experimentId}`;
@@ -567,6 +581,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             blocks: results,
             overallAccuracy,
             overallAverageRT,
+            overallAverageRTCorrectOnly,
             plannedTotalTrials: totalTrials,
             plannedTrialsPerBlock: trialsPerBlock,
             totalTrialsAttempted,
@@ -634,6 +649,22 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     }, [advanceAfterFeedback, clearFeedbackTimer, experimentState, feedbackCountdownSeconds]);
 
     useEffect(() => {
+        if (experimentState !== 'feedback') {
+            setIsFeedbackActionAvailable(false);
+            clearFeedbackActionTimer();
+            return;
+        }
+
+        clearFeedbackActionTimer();
+        setIsFeedbackActionAvailable(false);
+        feedbackActionTimerRef.current = setTimeout(() => {
+            setIsFeedbackActionAvailable(true);
+        }, FEEDBACK_ACTION_DELAY_MS);
+
+        return clearFeedbackActionTimer;
+    }, [clearFeedbackActionTimer, currentBlock, experimentState]);
+
+    useEffect(() => {
         const handlePreExperimentKey = (event: KeyboardEvent) => {
             if (experimentState !== 'preparation' || event.repeat) return;
             const key = event.key.toUpperCase() as KeyCode;
@@ -665,7 +696,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     }, [experimentState, currentTrial, recordTrialResult]);
 
     useEffect(() => {
-        if (experimentState !== 'feedback') return;
+        if (experimentState !== 'feedback' || !isFeedbackActionAvailable) return;
 
         const handleFeedbackHotkey = (event: KeyboardEvent) => {
             if (event.repeat) return;
@@ -678,7 +709,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
 
         window.addEventListener('keydown', handleFeedbackHotkey);
         return () => window.removeEventListener('keydown', handleFeedbackHotkey);
-    }, [advanceAfterFeedback, experimentState]);
+    }, [advanceAfterFeedback, experimentState, isFeedbackActionAvailable]);
 
     useEffect(() => {
         if (experimentState !== 'running') {
@@ -693,6 +724,9 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             }
             if (trialTimeoutRef.current) {
                 clearTimeout(trialTimeoutRef.current);
+            }
+            if (feedbackActionTimerRef.current) {
+                clearTimeout(feedbackActionTimerRef.current);
             }
         };
     }, []);
@@ -782,13 +816,13 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                                     <Clock className="h-4 w-4 text-amber-600" />
                                     <AlertTitle>
                                         {language === 'ja'
-                                            ? 'フィードバック生成には約10秒かかります'
-                                            : 'Personalized feedback takes about 10 seconds'}
+                                            ? '実験開始ボタンを押してから10秒程度時間がかかる場合があります'
+                                            : 'After pressing Start, it may take about 10 seconds'}
                                     </AlertTitle>
                                     <AlertDescription>
                                         {language === 'ja'
-                                            ? 'パーソナライズされたフィードバックを準備するため、開始直後に通常10秒程度の処理時間が発生します。メッセージが表示されるまでそのままお待ちください。'
-                                            : 'Generating your personalized feedback usually takes around 10 seconds when the experiment begins. Please stay on this screen until the message disappears.'}
+                                            ? '初期化が完了するまで画面を閉じず、そのままお待ちください。'
+                                            : 'Please keep this window open while we finish setting up.'}
                                     </AlertDescription>
                                 </Alert>
                             )}
@@ -963,9 +997,22 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                                             ? `${feedbackCountdown}秒後に${currentBlock >= totalBlocks ? '完了画面へ' : '次のブロックへ'}進みます`
                                             : `Advancing to the ${currentBlock >= totalBlocks ? 'completion screen' : 'next block'} in ${feedbackCountdown}s`}
                                     </p>
-                                    <Button onClick={advanceAfterFeedback} variant="secondary" size="sm">
-                                        {language === 'ja' ? '今すぐ進む' : 'Skip countdown'}
-                                    </Button>
+                                    {isFeedbackActionAvailable ? (
+                                        <Button
+                                            onClick={advanceAfterFeedback}
+                                            variant="default"
+                                            size="lg"
+                                            className="px-6 font-semibold shadow-sm"
+                                        >
+                                            {language === 'ja' ? '次へ進む' : 'Continue now'}
+                                        </Button>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground">
+                                            {language === 'ja'
+                                                ? '数秒後に手動で進むことができます'
+                                                : 'Manual advance will be available in a few seconds.'}
+                                        </p>
+                                    )}
                                 </div>
                             </CardContent>
                         ) : (
@@ -1024,19 +1071,29 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                                                 ? `自動で${currentBlock >= totalBlocks ? '完了画面へ遷移します' : '次のブロックへ進みます'}（残り ${feedbackCountdown}s）`
                                                 : `Auto-advancing to the ${currentBlock >= totalBlocks ? 'completion screen' : 'next block'} in ${feedbackCountdown}s`}
                                         </p>
-                                        <Button
-                                            onClick={advanceAfterFeedback}
-                                            variant="default"
-                                            size="lg"
-                                            className="px-6 font-semibold"
-                                        >
-                                            {language === 'ja' ? '次へ進む' : 'Go to next step now'}
-                                        </Button>
-                                        <p className="text-xs text-muted-foreground">
-                                            {language === 'ja'
-                                                ? 'D / F / J / K のいずれかを押しても進めます'
-                                                : 'You can also press D, F, J, or K to continue.'}
-                                        </p>
+                                        {isFeedbackActionAvailable ? (
+                                            <>
+                                                <Button
+                                                    onClick={advanceAfterFeedback}
+                                                    variant="default"
+                                                    size="lg"
+                                                    className="px-6 font-semibold"
+                                                >
+                                                    {language === 'ja' ? '次へ進む' : 'Go to next step now'}
+                                                </Button>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {language === 'ja'
+                                                        ? 'D / F / J / K のいずれかを押しても進めます'
+                                                        : 'You can also press D, F, J, or K to continue.'}
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <p className="text-xs text-muted-foreground">
+                                                {language === 'ja'
+                                                    ? '数秒後に手動で進む操作が有効になります'
+                                                    : 'Manual advance becomes available in a few seconds.'}
+                                            </p>
+                                        )}
                                     </div>
                                 </CardContent>
                             </>

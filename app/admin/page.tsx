@@ -19,7 +19,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye } from 'lucide-react';
+import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye, BarChart3 } from 'lucide-react';
 import type { TonePreference, MotivationStyle, EvaluationFocus } from '@/types';
 import { experimentConfig } from '@/lib/config/experiment';
 
@@ -481,6 +481,12 @@ export default function AdminDashboard() {
                                 ホームに戻る
                             </Link>
                         </Button>
+                        <Button variant="secondary" asChild>
+                            <Link href="/admin/results">
+                                <BarChart3 className="mr-2 h-4 w-4" />
+                                成果分析ビュー
+                            </Link>
+                        </Button>
                         <Button onClick={handleCreateParticipant} disabled={creating}>
                             <Plus className="mr-2 h-4 w-4" />
                             {creating ? '発行中...' : '発行'}
@@ -731,11 +737,11 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                        <div>
-                            <h4 className="font-semibold mb-3">実験履歴</h4>
-                            {selectedParticipant.experiments.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">まだ実験記録がありません</p>
-                            ) : (
+                            <div>
+                                <h4 className="font-semibold mb-3">実験履歴</h4>
+                                {selectedParticipant.experiments.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">まだ実験記録がありません</p>
+                                ) : (
                                     <div className="overflow-x-auto rounded-md border">
                                         <Table>
                                             <TableHeader>
