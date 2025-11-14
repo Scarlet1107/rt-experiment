@@ -67,9 +67,9 @@ export function calculatePerformanceStats(
   const incorrectTrials = trials.filter(t => t.isCorrect === false);
   const timeoutTrials = trials.filter(t => t.isCorrect === null);
 
-  // 応答した試行のみで正答率を計算（タイムアウトは除外）
+  // 正答率を計算（タイムアウトも含む）
   const respondedTrials = trials.filter(t => t.isCorrect !== null);
-  const accuracy = respondedTrials.length > 0 ? (correctTrials.length / respondedTrials.length) * 100 : 0;
+  const accuracy = totalTrials > 0 ? (correctTrials.length / totalTrials) * 100 : 0;
 
   // タイムアウト率も計算
   const timeoutRate = totalTrials > 0 ? (timeoutTrials.length / totalTrials) * 100 : 0;
