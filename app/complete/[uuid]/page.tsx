@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { LanguageProvider, useLanguage } from '../../../lib/i18n';
-import { getExperiment, getExperimentsByParticipant } from '../../../lib/storage';
+import { getExperiment } from '../../../lib/storage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -78,73 +78,33 @@ function CompleteContent({ uuid }: CompleteContentProps) {
     }, [condition, saveStatus, uuid]);
 
     useEffect(() => {
-        let isMounted = true;
+        let aborted = false;
 
-        const evaluateSessionCompletion = async () => {
+        const fetchCompletionStatus = async () => {
             try {
-                const records = await getExperimentsByParticipant(uuid);
-                if (!isMounted) return;
-
-                const completion = records.reduce<SessionCompletionState>((acc, record) => {
-                    const conditionType = record?.experiment?.conditionType;
-                    const isCompleted = Boolean(record?.experiment?.completedAt);
-
-                    if (!conditionType || !isCompleted) {
-                        return acc;
-                    }
-
-                    return {
-                        ...acc,
-                        [conditionType]: true
-                    };
-                }, { static: false, personalized: false });
-
-                setCompletedSessions(prev => ({
-                    static: prev.static || completion.static,
-                    personalized: prev.personalized || completion.personalized,
-                }));
-
-                if (typeof window !== 'undefined') {
-                    try {
-                        const storageKey = `completed-sessions-${uuid}`;
-                        const stored = window.localStorage.getItem(storageKey);
-                        const parsed = stored ? JSON.parse(stored) as Partial<SessionCompletionState> : {};
-                        const merged = {
-                            static: completion.static || Boolean(parsed.static),
-                            personalized: completion.personalized || Boolean(parsed.personalized),
-                        };
-                        window.localStorage.setItem(storageKey, JSON.stringify(merged));
-                    } catch (storageError) {
-                        console.warn('Failed to persist session completion snapshot:', storageError);
-                    }
+                const response = await fetch(`/api/participants/${uuid}/completion`, { cache: 'no-store' });
+                if (!response.ok) {
+                    throw new Error('Failed to fetch completion status');
+                }
+                const data = await response.json() as {
+                    staticCompletedAt: string | null;
+                    personalizedCompletedAt: string | null;
+                };
+                if (!aborted) {
+                    setCompletedSessions({
+                        static: Boolean(data.staticCompletedAt),
+                        personalized: Boolean(data.personalizedCompletedAt),
+                    });
                 }
             } catch (error) {
-                console.warn('Failed to evaluate session completion status:', error);
+                console.warn('Failed to load completion status from Supabase:', error);
             }
         };
 
-        evaluateSessionCompletion();
-
+        fetchCompletionStatus();
         return () => {
-            isMounted = false;
+            aborted = true;
         };
-    }, [uuid]);
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const storageKey = `completed-sessions-${uuid}`;
-
-        try {
-            const stored = window.localStorage.getItem(storageKey);
-            if (!stored) return;
-            const parsed = JSON.parse(stored) as Partial<SessionCompletionState>;
-            setCompletedSessions(prev => ({
-                static: prev.static || Boolean(parsed.static),
-                personalized: prev.personalized || Boolean(parsed.personalized),
-            }));
-        } catch (error) {
-            console.warn('Failed to read stored session completion flags:', error);
-        }
     }, [uuid]);
 
     const displayExperimentData = experimentData ?? pendingExperimentData;
@@ -168,7 +128,6 @@ function CompleteContent({ uuid }: CompleteContentProps) {
     const rawOverallAverageRTCorrectOnly = displayExperimentData?.overallAverageRTCorrectOnly;
     const hasOverallAverageRTCorrectOnly = typeof rawOverallAverageRTCorrectOnly === 'number' && !Number.isNaN(rawOverallAverageRTCorrectOnly);
     const overallAverageRTCorrectOnly = hasOverallAverageRTCorrectOnly ? rawOverallAverageRTCorrectOnly : 0;
-    const completedAt = displayExperimentData?.completedAt ? new Date(displayExperimentData.completedAt) : null;
     const currentConditionType = (displayExperimentData?.conditionType || condition) as 'static' | 'personalized';
     const hasCurrentSessionData = Boolean(displayExperimentData);
     const completedStaticSession = completedSessions.static || (hasCurrentSessionData && currentConditionType === 'static');
@@ -178,34 +137,12 @@ function CompleteContent({ uuid }: CompleteContentProps) {
     const shouldShowDownloadFallback = saveStatus !== 'success' && hasDownloadableData;
 
     useEffect(() => {
-        if (!hasCurrentSessionData || typeof window === 'undefined') return;
-        const storageKey = `completed-sessions-${uuid}`;
-
-        setCompletedSessions(prev => {
-            const updated = {
-                ...prev,
-                [currentConditionType]: true,
-            };
-
-            try {
-                const stored = window.localStorage.getItem(storageKey);
-                const parsed = stored ? JSON.parse(stored) as Partial<SessionCompletionState> : {};
-                const merged = {
-                    static: updated.static || Boolean(parsed.static),
-                    personalized: updated.personalized || Boolean(parsed.personalized),
-                };
-                window.localStorage.setItem(storageKey, JSON.stringify(merged));
-
-                if (merged.static === prev.static && merged.personalized === prev.personalized) {
-                    return prev;
-                }
-                return merged;
-            } catch (error) {
-                console.warn('Failed to persist session completion state:', error);
-                return updated;
-            }
-        });
-    }, [currentConditionType, hasCurrentSessionData, uuid]);
+        if (!hasCurrentSessionData) return;
+        setCompletedSessions(prev => ({
+            ...prev,
+            [currentConditionType]: true,
+        }));
+    }, [currentConditionType, hasCurrentSessionData]);
 
     const handleDownloadData = () => {
         if (!displayExperimentData) return;
@@ -413,8 +350,8 @@ function CompleteContent({ uuid }: CompleteContentProps) {
                                                 </h3>
                                                 <p className="text-sm text-green-800">
                                                     {language === 'ja'
-                                                        ? '全ての実験セッションが完了しました。ご協力いただき、誠にありがとうございました。研究結果は学術発表にて公表予定です。'
-                                                        : 'You have completed every session—thank you so much for your time. Findings will be shared in future academic publications.'}
+                                                        ? '全てのセッションが完了しました。ご協力いただきありがとうございました。'
+                                                        : 'You have completed all sessions. Thank you for your participation!'}
                                                 </p>
                                             </div>
                                         </div>

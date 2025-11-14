@@ -49,21 +49,24 @@ enum GenderType {
 }
 
 model Participant {
-    id              String               @id @default(uuid())
-    name            String?
-    studentId       String?              @map("student_id")
-    handedness      HandednessType?
-    age             Int?
-    gender          GenderType?
-    nickname        String?
-    preferredPraise String?              @map("preferred_praise")
-    tonePreference  TonePreferenceType?  @map("tone_preference")
-    motivationStyle MotivationStyleType? @map("motivation_style")
-    evaluationFocus EvaluationFocusType? @map("evaluation_focus")
-    language        LanguageType         @default(JA)
-    createdAt       DateTime             @default(now()) @map("created_at")
-    updatedAt       DateTime?            @default(now()) @updatedAt @map("updated_at")
-    experiments     Experiment[]
+    id                      String               @id @default(uuid())
+    name                    String?
+    studentId               String?              @map("student_id")
+    handedness              HandednessType?
+    age                     Int?
+    gender                  GenderType?
+    nickname                String?
+    preferredPraise         String?              @map("preferred_praise")
+    tonePreference          TonePreferenceType?  @map("tone_preference")
+    motivationStyle         MotivationStyleType? @map("motivation_style")
+    evaluationFocus         EvaluationFocusType? @map("evaluation_focus")
+    adminMemo               String?              @map("admin_memo")
+    language                LanguageType         @default(JA)
+    staticCompletedAt       DateTime?            @map("static_completed_at")
+    personalizedCompletedAt DateTime?            @map("personalized_completed_at")
+    createdAt               DateTime             @default(now()) @map("created_at")
+    updatedAt               DateTime?            @default(now()) @updatedAt @map("updated_at")
+    experiments             Experiment[]
 
     @@map("participants")
 }

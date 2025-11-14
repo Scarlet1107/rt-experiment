@@ -21,7 +21,7 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
             heroTitle: 'Stroop実験とは？',
             heroIntro: '色を識別する力と注意の切り替えを測る、認知心理学の代表的な課題です。',
             heroDetails: [
-                '画面に表示される単語の「意味」ではなく、インクの色だけを素早く判定し、対応するキーを入力します。',
+                '画面に表示される単語の「意味」ではなく、文字の色だけを素早く判定し、対応するキーを入力します。',
                 'ニンテンドー3DSなどで遊んだ脳トレを思い出す方もいるかもしれませんが、今回は研究目的の正式な計測です。',
                 'なるべく正確に、そして可能な限り速く回答できるよう意識してください。'
             ],
@@ -88,6 +88,16 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
             note: 'Please confirm you are in a quiet environment where you can concentrate before proceeding.'
         };
 
+    const focusReminder = language === 'ja'
+        ? {
+            title: '静かな場所で受けてください',
+            detail: 'この実験は集中力を大きく消耗します。通知をオフにし、静かな集中できる環境で取り組んでください。'
+        }
+        : {
+            title: 'Find a quiet spot',
+            detail: 'The task demands a lot of sustained focus—silence your notifications and make sure no one will interrupt you.'
+        };
+
     const handleStartPractice = () => {
         setIsStarting(true);
         setTimeout(() => {
@@ -96,10 +106,10 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
     };
 
     const colorMapping = [
-        { key: 'D', label: t.instructions.keyMapping.other, bg: 'bg-gray-800', text: 'text-white' },
-        { key: 'F', label: t.instructions.keyMapping.red, bg: 'bg-red-500', text: 'text-white' },
-        { key: 'J', label: t.instructions.keyMapping.green, bg: 'bg-green-500', text: 'text-white' },
-        { key: 'K', label: t.instructions.keyMapping.blue, bg: 'bg-blue-500', text: 'text-white' },
+        { key: 'A', label: t.instructions.keyMapping.other, bg: 'bg-gray-800', text: 'text-white' },
+        { key: 'S', label: t.instructions.keyMapping.red, bg: 'bg-red-500', text: 'text-white' },
+        { key: 'K', label: t.instructions.keyMapping.green, bg: 'bg-green-500', text: 'text-white' },
+        { key: 'L', label: t.instructions.keyMapping.blue, bg: 'bg-blue-500', text: 'text-white' },
     ];
 
     const exampleStimuli = language === 'ja'
@@ -107,16 +117,16 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
             {
                 badge: '例題 1',
                 title: '単語と色が同じとき',
-                description: '画面に「blue」が青色で表示されている場合は、色＝青なので K キーが正解です。',
-                answer: '→ 青色に対応する K キーを押す',
+                description: '画面に「blue」が青色で表示されている場合は、色＝青なので L キーが正解です。',
+                answer: '→ 青色に対応する L キーを押す',
                 src: '/images/examples/match.png',
                 alt: '青色で表示された「blue」の一致刺激'
             },
             {
                 badge: '例題 2',
                 title: '単語と色が違うとき',
-                description: '「blue」と書かれていても文字色が緑なら、意味に惑わされず緑＝J キーを押します。',
-                answer: '→ 緑色に対応する J キーが正解',
+                description: '「blue」と書かれていても文字色が緑なら、意味に惑わされず緑＝K キーを押します。',
+                answer: '→ 緑色に対応する K キーが正解',
                 src: '/images/examples/mismatch.png',
                 alt: '緑色で表示された「blue」の不一致刺激'
             },
@@ -124,7 +134,7 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                 badge: '例題 3',
                 title: '色以外の単語が出たとき',
                 description: '「water」など色名ではない単語が緑色で表示されたら、カテゴリは「その他」と判断します。',
-                answer: '→ D キー（その他）を押す',
+                answer: '→ A キー（その他）を押す',
                 src: '/images/examples/nonsense.png',
                 alt: '緑色で表示された「WATER」のその他刺激'
             }
@@ -133,16 +143,16 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
             {
                 badge: 'Example 1',
                 title: 'Word and ink color match',
-                description: 'If “blue” is printed in blue, ignore the text and confirm the color—press K.',
-                answer: '→ Press K for blue',
+                description: 'If “blue” is printed in blue, ignore the text and confirm the color—press L.',
+                answer: '→ Press L for blue',
                 src: '/images/examples/match.png',
                 alt: 'Congruent sample with blue shown in blue ink'
             },
             {
                 badge: 'Example 2',
                 title: 'Word and color mismatch',
-                description: 'When “blue” appears in green ink, trust the color only—press J for green.',
-                answer: '→ Press J for green',
+                description: 'When “blue” appears in green ink, trust the color only—press K for green.',
+                answer: '→ Press K for green',
                 src: '/images/examples/mismatch.png',
                 alt: 'Incongruent sample with blue shown in green ink'
             },
@@ -150,7 +160,7 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                 badge: 'Example 3',
                 title: 'Non-color words',
                 description: 'If a non-color word like “water” is shown in green, it still counts as “OTHER”.',
-                answer: '→ Press D for OTHER',
+                answer: '→ Press A for OTHER',
                 src: '/images/examples/nonsense.png',
                 alt: 'Non-color sample with WATER shown in green ink'
             }
@@ -184,6 +194,14 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                                     {detail}
                                 </p>
                             ))}
+                        </div>
+                        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-left shadow-md sm:text-center">
+                            <p className="text-base font-semibold text-rose-900">
+                                {focusReminder.title}
+                            </p>
+                            <p className="mt-1 text-sm text-rose-800">
+                                {focusReminder.detail}
+                            </p>
                         </div>
                     </div>
                 </section>
@@ -225,7 +243,7 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                         <div className="mb-5 flex items-center justify-between">
                             <h3 className="text-xl font-semibold text-slate-900">{t.instructions.keyMapping.title}</h3>
-                            <span className="text-xs uppercase tracking-widest text-slate-400">D / F / J / K</span>
+                            <span className="text-xs uppercase tracking-widest text-slate-400">A / S / K / L</span>
                         </div>
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                             {colorMapping.map(({ key, label, bg, text }) => (

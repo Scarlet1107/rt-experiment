@@ -58,9 +58,9 @@ function ConsentContent({ uuid }: ConsentContentProps) {
         : 'This study uses three ink colors—red, blue, and green. Please confirm you can distinguish each color below before participating.';
 
     const colorSwatches = [
-        { key: 'F', nameJa: '赤 (Fキー)', nameEn: 'Red (F key)', hex: '#ef4444' },
-        { key: 'J', nameJa: '緑 (Jキー)', nameEn: 'Green (J key)', hex: '#22c55e' },
-        { key: 'K', nameJa: '青 (Kキー)', nameEn: 'Blue (K key)', hex: '#2563eb' },
+        { key: 'S', nameJa: '赤 (Sキー)', nameEn: 'Red (S key)', hex: '#ef4444' },
+        { key: 'K', nameJa: '緑 (Kキー)', nameEn: 'Green (K key)', hex: '#22c55e' },
+        { key: 'L', nameJa: '青 (Lキー)', nameEn: 'Blue (L key)', hex: '#2563eb' },
     ];
 
     return (

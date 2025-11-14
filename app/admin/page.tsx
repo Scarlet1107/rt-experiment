@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -19,14 +21,13 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye, BarChart3 } from 'lucide-react';
+import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye, BarChart3, Check } from 'lucide-react';
 import type { TonePreference, MotivationStyle, EvaluationFocus } from '@/types';
 import { experimentConfig } from '@/lib/config/experiment';
 
 const {
     totalBlocks: configTotalBlocks,
     trialsPerBlock: configTrialsPerBlock,
-    totalTrials: configTotalTrials,
 } = experimentConfig;
 
 type ParticipantStatus = 'pending' | 'active' | 'abandoned' | 'completed';
@@ -67,6 +68,7 @@ interface ApiParticipant {
     evaluation_focus: EvaluationFocus | null;
     created_at: string;
     updated_at: string;
+    admin_memo: string | null;
     experiments: ApiExperiment[];
 }
 
@@ -100,21 +102,8 @@ interface ParticipantSummary {
         static: boolean;
         personalized: boolean;
     };
+    adminMemo: string | null;
 }
-
-const statusText: Record<ParticipantStatus, string> = {
-    pending: '未開始',
-    active: '進行中',
-    abandoned: '中断',
-    completed: '完了',
-};
-
-const statusBadgeVariant: Record<ParticipantStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-    completed: 'default',
-    active: 'secondary',
-    abandoned: 'destructive',
-    pending: 'outline',
-};
 
 const buildInviteUrl = (origin: string, participantId: string, condition: 'static' | 'personalized') => {
     const base = origin || '[BASE_URL]';
@@ -201,6 +190,7 @@ function transformParticipant(participant: ApiParticipant): ParticipantSummary {
             static: hasStaticCompleted,
             personalized: hasPersonalizedCompleted,
         },
+        adminMemo: participant.admin_memo ?? null,
     };
 }
 
@@ -343,6 +333,12 @@ export default function AdminDashboard() {
     const [origin, setOrigin] = useState('');
     const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [rowMemoDrafts, setRowMemoDrafts] = useState<Record<string, string>>({});
+    const [rowMemoSaving, setRowMemoSaving] = useState<Record<string, boolean>>({});
+    const [rowMemoFeedback, setRowMemoFeedback] = useState<Record<string, string | null>>({});
+    const [rowMemoLastSaved, setRowMemoLastSaved] = useState<Record<string, string>>({});
+    const [copiedInviteKey, setCopiedInviteKey] = useState<string | null>(null);
+    const memoSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -379,6 +375,18 @@ export default function AdminDashboard() {
             const summaries = data.participants.map(transformParticipant);
             setParticipants(summaries);
             computeStats(summaries);
+            const memoMap = summaries.reduce<Record<string, string>>((acc, participant) => {
+                acc[participant.id] = participant.adminMemo ?? '';
+                return acc;
+            }, {});
+            setRowMemoDrafts(memoMap);
+            setRowMemoLastSaved(memoMap);
+            setRowMemoSaving({});
+            setRowMemoFeedback({});
+            Object.values(memoSaveTimersRef.current).forEach(timer => {
+                if (timer) clearTimeout(timer);
+            });
+            memoSaveTimersRef.current = {};
         } catch (err) {
             console.error('参加者データの読み込みエラー:', err);
             setError(err instanceof Error ? err.message : '不明なエラーが発生しました');
@@ -390,6 +398,20 @@ export default function AdminDashboard() {
     useEffect(() => {
         loadParticipants();
     }, [loadParticipants]);
+
+    useEffect(() => {
+        return () => {
+            Object.values(memoSaveTimersRef.current).forEach(timer => {
+                if (timer) clearTimeout(timer);
+            });
+        };
+    }, []);
+
+    const updateParticipantMemoLocally = useCallback((participantId: string, memo: string) => {
+        setParticipants(prev => prev.map(p => p.id === participantId ? { ...p, adminMemo: memo } : p));
+        setRowMemoDrafts(prev => ({ ...prev, [participantId]: memo }));
+        setRowMemoLastSaved(prev => ({ ...prev, [participantId]: memo }));
+    }, []);
 
     const handleCreateParticipant = async () => {
         try {
@@ -437,6 +459,66 @@ export default function AdminDashboard() {
         }
     };
 
+    const persistMemo = useCallback(async (participantId: string, memoValue: string) => {
+        setRowMemoSaving(prev => ({ ...prev, [participantId]: true }));
+        setRowMemoFeedback(prev => ({ ...prev, [participantId]: '保存中...' }));
+        try {
+            const response = await fetch(`/api/admin/participants/${participantId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminMemo: memoValue }),
+            });
+            if (!response.ok) {
+                throw new Error('メモの保存に失敗しました');
+            }
+            updateParticipantMemoLocally(participantId, memoValue);
+            setRowMemoFeedback(prev => ({ ...prev, [participantId]: '保存しました' }));
+        } catch (err) {
+            console.error('Failed to save inline memo:', err);
+            setRowMemoFeedback(prev => ({ ...prev, [participantId]: '保存に失敗しました' }));
+        } finally {
+            setRowMemoSaving(prev => ({ ...prev, [participantId]: false }));
+            if (memoSaveTimersRef.current[participantId]) {
+                clearTimeout(memoSaveTimersRef.current[participantId]!);
+                memoSaveTimersRef.current[participantId] = null;
+            }
+        }
+    }, [updateParticipantMemoLocally]);
+
+    const scheduleMemoSave = useCallback((participantId: string, value: string) => {
+        if (memoSaveTimersRef.current[participantId]) {
+            clearTimeout(memoSaveTimersRef.current[participantId]!);
+        }
+        const lastSaved = rowMemoLastSaved[participantId] ?? '';
+        if (value === lastSaved) {
+            setRowMemoFeedback(prev => ({ ...prev, [participantId]: '保存済み' }));
+            return;
+        }
+        memoSaveTimersRef.current[participantId] = setTimeout(() => {
+            persistMemo(participantId, value);
+        }, 1500);
+    }, [persistMemo, rowMemoLastSaved]);
+
+    const handleRowMemoChange = useCallback((participantId: string, value: string) => {
+        setRowMemoDrafts(prev => ({ ...prev, [participantId]: value }));
+        setRowMemoFeedback(prev => ({ ...prev, [participantId]: value === (rowMemoLastSaved[participantId] ?? '') ? '保存済み' : '入力中...' }));
+        scheduleMemoSave(participantId, value);
+    }, [rowMemoLastSaved, scheduleMemoSave]);
+
+    const handleCopyInviteLink = async (participantId: string, condition: 'static' | 'personalized') => {
+        const url = buildInviteUrl(origin, participantId, condition);
+        const key = `${participantId}-${condition}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            setCopiedInviteKey(key);
+            setTimeout(() => {
+                setCopiedInviteKey(prev => (prev === key ? null : prev));
+            }, 1500);
+        } catch {
+            window.prompt('招待URLをコピーしてください', url);
+        }
+    };
+
     const recentInviteUrls = useMemo(() => {
         if (!recentParticipantId) return null;
         return {
@@ -449,7 +531,6 @@ export default function AdminDashboard() {
         if (!selectedParticipantId) return null;
         return participants.find(p => p.id === selectedParticipantId) || null;
     }, [participants, selectedParticipantId]);
-
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center">
@@ -598,84 +679,111 @@ export default function AdminDashboard() {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>参加者</TableHead>
-                                            <TableHead>言語</TableHead>
+                                            <TableHead>メモ</TableHead>
                                             <TableHead>進行状況</TableHead>
-                                            <TableHead>パフォーマンス</TableHead>
-                                            <TableHead>招待URL</TableHead>
+                                            <TableHead>招待リンク</TableHead>
                                             <TableHead>最終更新</TableHead>
-                                            <TableHead>ステータス</TableHead>
-                                            <TableHead className="text-right">操作</TableHead>
+                                            <TableHead className="text-right min-w-[160px]">操作</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {participants.map((participant) => (
-                                            <TableRow key={participant.id}>
-                                                <TableCell>
-                                                    <div className="space-y-1">
-                                                        <div className="text-base font-semibold">
-                                                            {participant.displayName || '氏名未登録'}
+                                        {participants.map(participant => {
+                                            const memoValue = rowMemoDrafts[participant.id] ?? participant.adminMemo ?? '';
+                                            const memoFeedbackText = rowMemoFeedback[participant.id] ?? '自動保存されます';
+                                            const memoFeedbackColor = memoFeedbackText.includes('失敗')
+                                                ? 'text-red-500'
+                                                : memoFeedbackText.includes('保存中')
+                                                    ? 'text-amber-600'
+                                                    : 'text-muted-foreground';
+                                            const isMemoSaving = rowMemoSaving[participant.id];
+                                            return (
+                                                <TableRow key={participant.id}>
+                                                    <TableCell>
+                                                        <div className="space-y-1">
+                                                            <div className="text-base font-semibold">
+                                                                {participant.displayName || '氏名未登録'}
+                                                            </div>
+                                                            <div className="text-xs text-muted-foreground flex flex-wrap gap-2">
+                                                                <span>ID: {participant.id.slice(0, 8)}...</span>
+                                                                <span>ニックネーム: {participant.nickname || '未登録'}</span>
+                                                                <span>学籍番号: {participant.profile.studentId || '未登録'}</span>
+                                                            </div>
+                                                            {!participant.profileCompleted && (
+                                                                <Badge variant="outline" className="text-[10px]">
+                                                                    プロフィール未入力
+                                                                </Badge>
+                                                            )}
                                                         </div>
-                                                        <div className="text-xs text-muted-foreground flex flex-wrap gap-2">
-                                                            <span>ID: {participant.id.slice(0, 8)}...</span>
-                                                            <span>ニックネーム: {participant.nickname || '未登録'}</span>
-                                                            <span>学籍番号: {participant.profile.studentId || '未登録'}</span>
+                                                    </TableCell>
+                                                    <TableCell className="min-w-[220px] relative">
+                                                        <Textarea
+                                                            value={memoValue}
+                                                            onChange={(event) => handleRowMemoChange(participant.id, event.target.value)}
+                                                            rows={3}
+                                                            placeholder="本名やLINE名などのメモを入力"
+                                                        />
+                                                        <span className={cn('block text-xs bottom-3 absolute right-6', memoFeedbackColor)}>
+                                                            {isMemoSaving ? '保存中...' : memoFeedbackText}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="w-max">
+                                                        <div className="flex flex-col flex-wrap gap-2">
+                                                            <ConditionStatusPill label="Static" done={participant.conditionCompletion.static} />
+                                                            <ConditionStatusPill label="Personalized" done={participant.conditionCompletion.personalized} />
                                                         </div>
-                                                        {!participant.profileCompleted && (
-                                                            <Badge variant="outline" className="text-[10px]">
-                                                                プロフィール未入力
-                                                            </Badge>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {participant.language === 'en' ? '英語' : participant.language === 'ja' ? '日本語' : '未設定'}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="mt-2 flex flex-wrap gap-2">
-                                                        <ConditionStatusPill label="Static" done={participant.conditionCompletion.static} />
-                                                        <ConditionStatusPill label="Personalized" done={participant.conditionCompletion.personalized} />
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <span className="text-sm text-muted-foreground">-</span>
-                                                </TableCell>
-                                                <TableCell className="min-w-[220px] space-y-2">
-                                                    <InviteLinkRow
-                                                        label="Static"
-                                                        url={buildInviteUrl(origin, participant.id, 'static')}
-                                                    />
-                                                    <InviteLinkRow
-                                                        label="Personalized"
-                                                        url={buildInviteUrl(origin, participant.id, 'personalized')}
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="text-sm text-muted-foreground">
-                                                    {participant.lastUpdate.toLocaleDateString('ja-JP')}<br />
-                                                    {participant.lastUpdate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant={statusBadgeVariant[participant.status]}>
-                                                        {statusText[participant.status]}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right space-x-2">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => handleSelectParticipant(participant.id)}
-                                                    >
-                                                        <Eye className="h-3.5 w-3.5 mr-1" />
-                                                        詳細
-                                                    </Button>
-                                                    <DeleteParticipantButton
-                                                        participantId={participant.id}
-                                                        participantLabel={participant.displayName || participant.nickname || participant.id.slice(0, 8)}
-                                                        onConfirm={handleDeleteParticipant}
-                                                        disabled={deletingId === participant.id}
-                                                    />
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
+                                                    </TableCell>
+                                                    <TableCell className="w-max flex flex-col space-y-2">
+                                                        {(['static', 'personalized'] as const).map(condition => {
+                                                            const key = `${participant.id}-${condition}`;
+                                                            const copied = copiedInviteKey === key;
+                                                            const inviteUrl = buildInviteUrl(origin, participant.id, condition);
+                                                            return (
+                                                                <div key={key} className="group relative w-full">
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className="w-full justify-start gap-2 px-2 py-1 text-xs"
+                                                                        onClick={() => handleCopyInviteLink(participant.id, condition)}
+                                                                    >
+                                                                        {copied ? (
+                                                                            <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                                                        ) : (
+                                                                            <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                                                                        )}
+                                                                        <span>{condition === 'static' ? 'Static' : 'Personalized'}</span>
+                                                                    </Button>
+                                                                    <div className="pointer-events-none absolute left-0 top-0 -translate-y-2 opacity-0 transition-opacity duration-100 group-hover:opacity-100">
+                                                                        <div className="rounded-md border bg-popover px-2 py-1 text-[10px] font-mono text-muted-foreground shadow">
+                                                                            {inviteUrl}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-muted-foreground">
+                                                        {participant.lastUpdate.toLocaleDateString('ja-JP')}<br />
+                                                        {participant.lastUpdate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                                                    </TableCell>
+                                                    <TableCell className="text-right space-x-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleSelectParticipant(participant.id)}
+                                                        >
+                                                            <Eye className="h-3.5 w-3.5 mr-1" />
+                                                            詳細
+                                                        </Button>
+                                                        <DeleteParticipantButton
+                                                            participantId={participant.id}
+                                                            participantLabel={participant.displayName || participant.nickname || participant.id.slice(0, 8)}
+                                                            onConfirm={handleDeleteParticipant}
+                                                            disabled={deletingId === participant.id}
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
                                     </TableBody>
                                 </Table>
                             </div>
@@ -774,6 +882,7 @@ export default function AdminDashboard() {
                                     </div>
                                 )}
                             </div>
+
 
                             <div>
                                 <h4 className="font-semibold mb-3">表示されたフィードバック</h4>

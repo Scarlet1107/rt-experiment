@@ -69,3 +69,26 @@ export async function DELETE(_: Request, { params }: { params: Promise<RoutePara
         return NextResponse.json({ error: 'Failed to delete participant' }, { status: 500 });
     }
 }
+
+export async function PATCH(request: Request, { params }: { params: Promise<RouteParams> }) {
+    try {
+        const { id } = await params;
+        const supabase = getAdminClient();
+        const body = await request.json();
+        const adminMemo = typeof body.adminMemo === 'string' ? body.adminMemo : null;
+
+        const { data, error } = await supabase
+            .from('participants')
+            .update({ admin_memo: adminMemo })
+            .eq('id', id)
+            .select('*, experiments(*, blocks(*))')
+            .single();
+
+        if (error) throw error;
+
+        return NextResponse.json({ participant: data });
+    } catch (error) {
+        console.error('Failed to update participant memo:', error);
+        return NextResponse.json({ error: 'Failed to update participant memo' }, { status: 500 });
+    }
+}

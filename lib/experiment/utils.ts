@@ -20,8 +20,7 @@ export function generateStaticFeedback(
   blockIndex: number,
   accuracy: number,
   averageRT: number,
-  language: 'ja' | 'en' = 'ja',
-  timeoutRate?: number
+  language: 'ja' | 'en' = 'ja'
 ): string {
   const blockNumber = blockIndex + 1;
 
@@ -30,10 +29,6 @@ export function generateStaticFeedback(
 
 Accuracy: ${accuracy.toFixed(1)}%
 Average reaction time: ${averageRT}ms`;
-    if (timeoutRate !== undefined) {
-      feedback += `
-Timeout rate: ${timeoutRate.toFixed(1)}%`;
-    }
     feedback += `
 Blocks completed: ${blockNumber}/${experimentConfig.totalBlocks}`;
     return feedback;
@@ -43,10 +38,6 @@ Blocks completed: ${blockNumber}/${experimentConfig.totalBlocks}`;
 
 正答率: ${accuracy.toFixed(1)}%
 平均反応時間: ${averageRT}ms`;
-  if (timeoutRate !== undefined) {
-    feedback += `
-タイムアウト率: ${timeoutRate.toFixed(1)}%`;
-  }
   feedback += `
 完了ブロック: ${blockNumber}/${experimentConfig.totalBlocks}`;
   return feedback;
@@ -54,10 +45,10 @@ Blocks completed: ${blockNumber}/${experimentConfig.totalBlocks}`;
 
 // カラーキーマッピング
 export const COLOR_KEY_MAP = {
-  'RED': 'f',
-  'GREEN': 'j',
-  'BLUE': 'k',
-  'OTHER': 'd'
+  'RED': 's',
+  'GREEN': 'k',
+  'BLUE': 'l',
+  'OTHER': 'a'
 } as const;
 
 // 色を16進数に変換
@@ -84,7 +75,11 @@ export function calculatePerformanceStats(
   const timeoutRate = totalTrials > 0 ? (timeoutTrials.length / totalTrials) * 100 : 0;
 
   const answeredTrials = trials.filter(
-    t => typeof t.responseKey === 'string' && typeof t.reactionTime === 'number' && (t.reactionTime ?? 0) > 0
+    t =>
+      t.isCorrect !== null &&
+      typeof t.responseKey === 'string' &&
+      typeof t.reactionTime === 'number' &&
+      (t.reactionTime ?? 0) > 0
   );
 
   const allRTs = answeredTrials

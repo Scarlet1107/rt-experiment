@@ -2,7 +2,7 @@ import { Language } from '../lib/i18n';
 
 // 基本的な色の型定義
 export type Color = 'RED' | 'BLUE' | 'GREEN';
-export type KeyCode = 'F' | 'J' | 'K' | 'D';
+export type KeyCode = 'A' | 'S' | 'K' | 'L';
 export type WordType = Color | 'NONSENSE';
 export type AnswerType = Color | 'OTHER';
 export type TonePreference = 'casual' | 'gentle' | 'formal';
@@ -98,6 +98,7 @@ export interface ExperimentConfig {
     feedbackCountdownSeconds: number;  // フィードバック表示時間の上限（秒）
     practiceTrialCount: number;        // 練習パートの試行数
     trialTimeLimitMs: number | null;   // 1試行あたりの制限時間（ms、nullの場合は無制限）
+    feedbackButtonDelayMs: number;     // フィードバック画面で「次へ」ボタンが出現するまでの遅延(ms)
     showProgressDebug: boolean;        // 進捗表示のデバッグ用フラグ
     stimulusDisplayTime?: number;      // 刺激表示時間（ms、制限なしの場合null）
     interTrialInterval?: number;       // 試行間間隔（ms）
@@ -118,6 +119,9 @@ export interface ParticipantRow {
     motivation_style: MotivationStyle | null;
     evaluation_focus: EvaluationFocus | null;
     language: string | null;
+    admin_memo: string | null;
+    static_completed_at: string | null;
+    personalized_completed_at: string | null;
     created_at: string;
     updated_at: string;
 }

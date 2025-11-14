@@ -1,4 +1,5 @@
 import { supabase } from '../../utils/supabase/client';
+import { v5 as uuidv5 } from 'uuid';
 import {
     ParticipantRow,
     ExperimentRow,
@@ -13,6 +14,8 @@ import {
     updateSyncStatus,
     getPendingSyncExperiments
 } from './indexeddb';
+
+const TRIAL_UUID_NAMESPACE = '0a01fbb7-e2c3-4630-9aef-0d38e13a55b5';
 
 /**
  * 実験データをSupabaseに同期
@@ -124,8 +127,13 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
             for (const [trialIndex, trial] of block.trials.entries()) {
                 console.log(`試行 ${trialIndex + 1}/${block.trials.length} 処理開始 (ID: ${trial.id})`);
 
+                const normalizedReactionTime =
+                    typeof trial.reactionTime === 'number' && !Number.isNaN(trial.reactionTime)
+                        ? Math.round(trial.reactionTime)
+                        : undefined;
+
                 const trialRow: Omit<TrialRow, 'created_at'> = {
-                    id: `${trial.blockId}-trial-${trial.id}`,
+                    id: uuidv5(`${trial.blockId}-trial-${trial.id}`, TRIAL_UUID_NAMESPACE),
                     block_id: trial.blockId,
                     trial_number: trial.id,
                     word: trial.stimulus.word,
@@ -135,7 +143,7 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
                     response_key: trial.responseKey || undefined,
                     chosen_answer: trial.chosenAnswer || undefined,
                     is_correct: trial.isCorrect !== null ? trial.isCorrect : undefined, // false値を保持
-                    reaction_time: trial.reactionTime || undefined,
+                    reaction_time: normalizedReactionTime,
                     timestamp: trial.timestamp.toISOString(),
                 };
 
@@ -174,6 +182,26 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
 
         console.log('\n✅ 全ブロック同期完了');
 
+        if (experiment.completedAt) {
+            const completionField = experiment.conditionType === 'static'
+                ? 'static_completed_at'
+                : 'personalized_completed_at';
+            const updatePayload: Record<string, string> = {
+                [completionField]: experiment.completedAt.toISOString(),
+                updated_at: new Date().toISOString(),
+            };
+            const { error: participantUpdateError } = await supabase
+                .from('participants')
+                .update(updatePayload)
+                .eq('id', experiment.participantId);
+
+            if (participantUpdateError) {
+                console.error('❌ 参加者完了フラグ更新エラー:', participantUpdateError);
+            } else {
+                console.log('✅ 参加者完了フラグを更新しました');
+            }
+        }
+
         // 同期完了をマーク
         await updateSyncStatus(experiment.id, 'synced');
         return true;
@@ -201,9 +229,10 @@ export async function saveParticipantToSupabase(participant: {
     motivationStyle: MotivationStyle;
     evaluationFocus: EvaluationFocus;
     language: string;
+    adminMemo?: string | null;
 }): Promise<boolean> {
     try {
-        const participantRow: Omit<ParticipantRow, 'created_at' | 'updated_at'> & { updated_at?: string } = {
+        const participantRow = {
             id: participant.id,
             name: participant.name,
             student_id: participant.studentId,
@@ -216,8 +245,11 @@ export async function saveParticipantToSupabase(participant: {
             motivation_style: participant.motivationStyle,
             evaluation_focus: participant.evaluationFocus,
             language: participant.language,
+            admin_memo: participant.adminMemo ?? null,
+            static_completed_at: null,
+            personalized_completed_at: null,
             updated_at: new Date().toISOString(),
-        };
+        } satisfies Omit<ParticipantRow, 'created_at' | 'updated_at'> & { updated_at?: string };
 
         const { error } = await supabase
             .from('participants')

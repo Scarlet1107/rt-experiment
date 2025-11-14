@@ -24,6 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { User, GraduationCap, Hand, Calendar, Users, MessageCircle, RotateCcw } from 'lucide-react';
 import type { TonePreference, MotivationStyle, EvaluationFocus, ParticipantRow } from '@/types';
+import { cn } from '@/lib/utils';
 
 interface SurveyFormData {
     // 基本情報
@@ -206,12 +207,16 @@ function SurveyContent({ uuid }: SurveyContentProps) {
     const toneOptions = TONE_OPTIONS[language as 'ja' | 'en'] || TONE_OPTIONS.ja;
     const motivationOptions = MOTIVATION_OPTIONS[language as 'ja' | 'en'] || MOTIVATION_OPTIONS.ja;
     const evaluationOptions = EVALUATION_OPTIONS[language as 'ja' | 'en'] || EVALUATION_OPTIONS.ja;
-    const genderLabels = language === 'ja'
-        ? { male: '男性', female: '女性', other: 'その他' }
-        : { male: 'Male', female: 'Female', other: 'Other' };
-    const handednessLabels = language === 'ja'
-        ? { right: '右利き', left: '左利き', other: 'その他・回答しない' }
-        : { right: 'Right-handed', left: 'Left-handed', other: 'Other / Prefer not to say' };
+    const genderLabels = useMemo(() => (
+        language === 'ja'
+            ? { male: '男性', female: '女性', other: 'その他' }
+            : { male: 'Male', female: 'Female', other: 'Other' }
+    ), [language]);
+    const handednessLabels = useMemo(() => (
+        language === 'ja'
+            ? { right: '右利き', left: '左利き', other: 'その他・回答しない' }
+            : { right: 'Right-handed', left: 'Left-handed', other: 'Other / Prefer not to say' }
+    ), [language]);
     const savingLabel = language === 'ja' ? '保存中...' : 'Saving...';
     const multiSelectNote = language === 'ja' ? '（複数選択可）' : '(Multiple selections)';
     const selectedLabel = language === 'ja' ? '選択済み' : 'Selected';
@@ -614,24 +619,30 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                                 <Hand className="mr-1 h-4 w-4" />
                                                 {surveyCopy.handednessLabel}
                                             </Label>
-                                            <RadioGroup
-                                                value={formData.handedness}
-                                                onValueChange={(value) => handleInputChange('handedness', value)}
-                                                disabled={isSubmitting}
-                                            >
-                                                <div className="flex items-center space-x-2">
-                                                    <RadioGroupItem value="right" id="right" />
-                                                    <Label htmlFor="right">{surveyCopy.handednessOptions.right}</Label>
-                                                </div>
-                                                <div className="flex items-center space-x-2">
-                                                    <RadioGroupItem value="left" id="left" />
-                                                    <Label htmlFor="left">{surveyCopy.handednessOptions.left}</Label>
-                                                </div>
-                                                <div className="flex items-center space-x-2">
-                                                    <RadioGroupItem value="other" id="handedness-other" />
-                                                    <Label htmlFor="handedness-other">{surveyCopy.handednessOptions.other}</Label>
-                                                </div>
-                                            </RadioGroup>
+                                        <RadioGroup
+                                            value={formData.handedness}
+                                            onValueChange={(value) => handleInputChange('handedness', value)}
+                                            disabled={isSubmitting}
+                                            className="space-y-2"
+                                        >
+                                            {(['right', 'left', 'other'] as const).map(option => (
+                                                <Label
+                                                    key={option}
+                                                    htmlFor={`handedness-${option}`}
+                                                    className={cn(
+                                                        'flex items-center justify-between rounded-lg border px-3 py-2 text-sm font-medium transition-colors cursor-pointer',
+                                                        formData.handedness === option
+                                                            ? 'border-blue-500 bg-blue-50 text-blue-900'
+                                                            : 'border-border bg-white text-slate-600 hover:border-slate-300'
+                                                    )}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <RadioGroupItem value={option} id={`handedness-${option}`} />
+                                                        {surveyCopy.handednessOptions[option]}
+                                                    </div>
+                                                </Label>
+                                            ))}
+                                        </RadioGroup>
                                             {errors.handedness && (
                                                 <p className="text-sm text-red-600">{errors.handedness}</p>
                                             )}
@@ -672,18 +683,22 @@ function SurveyContent({ uuid }: SurveyContentProps) {
                                             disabled={isSubmitting}
                                             className="grid gap-3 sm:grid-cols-3"
                                         >
-                                            {(['male', 'female', 'other'] as const).map((value) => (
-                                                <div
+                                            {(['male', 'female', 'other'] as const).map(value => (
+                                                <Label
                                                     key={value}
-                                                    className={`flex items-center space-x-2 rounded-full border px-4 py-2 ${formData.gender === value
-                                                        ? 'border-blue-500 bg-blue-50'
-                                                        : 'border-gray-200 bg-white'}`}
+                                                    htmlFor={`gender-${value}`}
+                                                    className={cn(
+                                                        'flex items-center justify-between rounded-lg border px-4 py-3 text-sm font-medium transition-colors cursor-pointer',
+                                                        formData.gender === value
+                                                            ? 'border-violet-500 bg-violet-50 text-violet-900'
+                                                            : 'border-border bg-white text-slate-600 hover:border-slate-300'
+                                                    )}
                                                 >
-                                                    <RadioGroupItem value={value} id={`gender-${value}`} />
-                                                    <Label htmlFor={`gender-${value}`} className="text-sm font-medium cursor-pointer">
+                                                    <div className="flex items-center gap-2">
+                                                        <RadioGroupItem value={value} id={`gender-${value}`} />
                                                         {genderLabels[value]}
-                                                    </Label>
-                                                </div>
+                                                    </div>
+                                                </Label>
                                             ))}
                                         </RadioGroup>
                                         {errors.gender && (

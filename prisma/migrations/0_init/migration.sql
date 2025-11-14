@@ -22,19 +22,19 @@ CREATE TYPE "GenderType" AS ENUM ('male', 'female', 'other');
 -- CreateTable
 CREATE TABLE "participants" (
     "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "student_id" TEXT NOT NULL,
-    "handedness" "HandednessType" NOT NULL,
-    "age" INTEGER NOT NULL,
-    "gender" "GenderType" NOT NULL,
-    "nickname" TEXT NOT NULL,
-    "preferred_praise" TEXT NOT NULL,
-    "tone_preference" "TonePreferenceType" NOT NULL,
-    "motivation_style" "MotivationStyleType" NOT NULL,
-    "evaluation_focus" "EvaluationFocusType" NOT NULL,
+    "name" TEXT,
+    "student_id" TEXT,
+    "handedness" "HandednessType",
+    "age" INTEGER,
+    "gender" "GenderType",
+    "nickname" TEXT,
+    "preferred_praise" TEXT,
+    "tone_preference" "TonePreferenceType",
+    "motivation_style" "MotivationStyleType",
+    "evaluation_focus" "EvaluationFocusType",
     "language" "LanguageType" NOT NULL DEFAULT 'ja',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
+    "updated_at" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "participants_pkey" PRIMARY KEY ("id")
 );
@@ -50,6 +50,7 @@ CREATE TABLE "experiments" (
     "total_trials" INTEGER NOT NULL DEFAULT 0,
     "overall_accuracy" DOUBLE PRECISION,
     "overall_avg_rt" DOUBLE PRECISION,
+    "overall_avg_rt_correct_only" DOUBLE PRECISION,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "experiments_pkey" PRIMARY KEY ("id")
@@ -63,6 +64,7 @@ CREATE TABLE "blocks" (
     "trial_count" INTEGER NOT NULL DEFAULT 0,
     "accuracy" DOUBLE PRECISION,
     "average_rt" DOUBLE PRECISION,
+    "average_rt_correct_only" DOUBLE PRECISION,
     "feedback_shown" TEXT,
     "completed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -88,6 +90,18 @@ CREATE TABLE "trials" (
     CONSTRAINT "trials_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "feedback_patterns" (
+    "id" TEXT NOT NULL,
+    "participant_id" TEXT NOT NULL,
+    "language" "LanguageType" NOT NULL DEFAULT 'ja',
+    "patterns" JSONB NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "feedback_patterns_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE INDEX "experiments_participant_id_idx" ON "experiments"("participant_id");
 
@@ -97,6 +111,9 @@ CREATE INDEX "blocks_experiment_id_idx" ON "blocks"("experiment_id");
 -- CreateIndex
 CREATE INDEX "trials_block_id_idx" ON "trials"("block_id");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "feedback_patterns_participant_id_key" ON "feedback_patterns"("participant_id");
+
 -- AddForeignKey
 ALTER TABLE "experiments" ADD CONSTRAINT "experiments_participant_id_fkey" FOREIGN KEY ("participant_id") REFERENCES "participants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -105,3 +122,4 @@ ALTER TABLE "blocks" ADD CONSTRAINT "blocks_experiment_id_fkey" FOREIGN KEY ("ex
 
 -- AddForeignKey
 ALTER TABLE "trials" ADD CONSTRAINT "trials_block_id_fkey" FOREIGN KEY ("block_id") REFERENCES "blocks"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+

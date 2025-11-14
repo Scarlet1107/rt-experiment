@@ -103,7 +103,6 @@ interface ParsedFeedback {
 
 const NEXT_TRIAL_DELAY_MS = 500;
 const TRIAL_FEEDBACK_DURATION_MS = NEXT_TRIAL_DELAY_MS;
-const FEEDBACK_ACTION_DELAY_MS = 3000;
 
 function ExperimentContent({ uuid }: ExperimentContentProps) {
     const router = useRouter();
@@ -116,6 +115,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         feedbackCountdownSeconds,
         trialTimeLimitMs,
         showProgressDebug,
+        feedbackButtonDelayMs,
     } = experimentConfig;
 
     // 実験全体の状態
@@ -169,10 +169,10 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
 
     // キー対応表
     const KEY_TO_ANSWER: Record<KeyCode, AnswerType> = useMemo(() => ({
-        'F': 'RED',
-        'J': 'GREEN',
-        'K': 'BLUE',
-        'D': 'OTHER'
+        'S': 'RED',
+        'K': 'GREEN',
+        'L': 'BLUE',
+        'A': 'OTHER'
     }), []);
 
     // 色の表示用
@@ -440,13 +440,11 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             );
         } else {
             // 静的フィードバック（機械的な数値情報のみ）
-            const stats = calculatePerformanceStats(result.trials);
             feedback = generateStaticFeedback(
                 result.blockNumber - 1,
                 result.accuracy,
                 result.averageRT,
-                targetLanguage,
-                stats.timeoutRate
+                targetLanguage
             );
         }
 
@@ -571,7 +569,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         const trialId = currentTrialIndex + 1; // currentTrialIndexを基準に設定
         console.log(`⏰ タイムアウト試行記録: ブロック${currentBlock}, 試行${trialId}/${trialsPerBlock}`, {
             currentTrialIndex,
-            currentBlockTrialsLength: currentBlockTrials.length,
+            currentBlockTrialsLength: currentBlockTrialsRef.current.length,
             trialId,
             blockId: timedOutTrial.blockId,
             stimulus: timedOutTrial.stimulus.word
@@ -666,7 +664,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         const trialId = currentTrialIndex + 1; // currentTrialIndexを基準に設定
         console.log(`🔍 試行記録: ブロック${currentBlock}, 試行${trialId}/${trialsPerBlock}`, {
             currentTrialIndex,
-            currentBlockTrialsLength: currentBlockTrials.length,
+            currentBlockTrialsLength: currentBlockTrialsRef.current.length,
             trialId,
             blockId: currentTrial.blockId,
             stimulus: currentTrial.stimulus.word,
@@ -787,6 +785,19 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             sessionStorage.removeItem(pendingExperimentKey);
         }
 
+        try {
+            await fetch(`/api/participants/${uuid}/completion`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    condition: conditionType,
+                    completedAt: completedAt.toISOString()
+                })
+            });
+        } catch (error) {
+            console.error('Failed to update Supabase completion status:', error);
+        }
+
         router.push(`/complete/${uuid}?condition=${conditionType}&saveStatus=${saveStatus}`);
     }, [conditionType, participantInfo?.language, router, uuid, language, totalTrials, trialsPerBlock]);
 
@@ -833,16 +844,16 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         setIsFeedbackActionAvailable(false);
         feedbackActionTimerRef.current = setTimeout(() => {
             setIsFeedbackActionAvailable(true);
-        }, FEEDBACK_ACTION_DELAY_MS);
+        }, feedbackButtonDelayMs);
 
         return clearFeedbackActionTimer;
-    }, [clearFeedbackActionTimer, currentBlock, experimentState]);
+    }, [clearFeedbackActionTimer, currentBlock, experimentState, feedbackButtonDelayMs]);
 
     useEffect(() => {
         const handlePreExperimentKey = (event: KeyboardEvent) => {
             if (experimentState !== 'preparation' || event.repeat) return;
             const key = event.key.toUpperCase() as KeyCode;
-            if (['F', 'J', 'K', 'D'].includes(key)) {
+            if (['A', 'S', 'K', 'L'].includes(key)) {
                 event.preventDefault();
                 handleExperimentStart();
             }
@@ -859,7 +870,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         const handleKeyPress = (event: KeyboardEvent) => {
             const key = event.key.toUpperCase() as KeyCode;
 
-            if (['F', 'J', 'K', 'D'].includes(key) && !hasRespondedRef.current) {
+            if (['A', 'S', 'K', 'L'].includes(key) && !hasRespondedRef.current) {
                 const reactionTime = performance.now() - trialStartRef.current;
                 recordTrialResult(key, reactionTime);
             }
@@ -875,7 +886,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         const handleFeedbackHotkey = (event: KeyboardEvent) => {
             if (event.repeat) return;
             const key = event.key.toUpperCase() as KeyCode;
-            if (['D', 'F', 'J', 'K'].includes(key)) {
+            if (['A', 'S', 'K', 'L'].includes(key)) {
                 event.preventDefault();
                 advanceAfterFeedback();
             }
@@ -1034,8 +1045,8 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                                 </Button>
                                 <p className="text-xs text-muted-foreground">
                                     {language === 'ja'
-                                        ? 'D / F / J / K のいずれかを押しても開始できます'
-                                        : 'Press any of D / F / J / K to start as well.'}
+                                        ? 'A / S / K / L のいずれかを押しても開始できます'
+                                        : 'Press any of A / S / K / L to start as well.'}
                                 </p>
                                 {startError && (
                                     <p className="text-sm text-red-600">
@@ -1112,25 +1123,25 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                             <CardContent className="p-4">
                                 <div className="grid grid-cols-4 gap-4 text-center">
                                     <div className="space-y-2">
-                                        <Badge variant="outline" className="text-lg p-2">D</Badge>
+                                        <Badge variant="outline" className="text-lg p-2">A</Badge>
                                         <p className="text-sm text-muted-foreground">
                                             {language === 'ja' ? 'その他' : 'Other'}
                                         </p>
                                     </div>
                                     <div className="space-y-2">
-                                        <Badge variant="outline" className="text-lg p-2">F</Badge>
+                                        <Badge variant="outline" className="text-lg p-2">S</Badge>
                                         <p className="text-sm text-muted-foreground">
                                             {language === 'ja' ? '赤色' : 'Red'}
                                         </p>
                                     </div>
                                     <div className="space-y-2">
-                                        <Badge variant="outline" className="text-lg p-2">J</Badge>
+                                        <Badge variant="outline" className="text-lg p-2">K</Badge>
                                         <p className="text-sm text-muted-foreground">
                                             {language === 'ja' ? '緑色' : 'Green'}
                                         </p>
                                     </div>
                                     <div className="space-y-2">
-                                        <Badge variant="outline" className="text-lg p-2">K</Badge>
+                                        <Badge variant="outline" className="text-lg p-2">L</Badge>
                                         <p className="text-sm text-muted-foreground">
                                             {language === 'ja' ? '青色' : 'Blue'}
                                         </p>
@@ -1257,7 +1268,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                                                 </Button>
                                                 <p className="text-xs text-muted-foreground">
                                                     {language === 'ja'
-                                                        ? 'D / F / J / K のいずれかを押しても進めます'
+                                                        ? 'A / S / K / L のいずれかを押しても進めます'
                                                         : 'You can also press D, F, J, or K to continue.'}
                                                 </p>
                                             </>
