@@ -15,19 +15,42 @@ import {
     getPendingSyncExperiments
 } from './indexeddb';
 
-const TRIAL_UUID_NAMESPACE = 'f5f0f5c2-4c70-4c4d-8de5-e6a0c97c7c1f';
+const TRIAL_UUID_NAMESPACE = '0a01fbb7-e2c3-4630-9aef-0d38e13a55b5';
 
 /**
  * 実験データをSupabaseに同期
  */
 export async function syncExperimentToSupabase(experimentId: string): Promise<boolean> {
     try {
+        console.log('=== Supabase同期開始 ===');
+        console.log('実験ID:', experimentId);
+
         const storedData = await getExperiment(experimentId);
         if (!storedData) {
             throw new Error(`Experiment ${experimentId} not found in local storage`);
         }
 
         const experiment = storedData.experiment;
+
+        // デバッグログ: 実験データの詳細
+        console.log('同期対象実験データ:', {
+            experimentId: experiment.id,
+            participantId: experiment.participantId,
+            conditionType: experiment.conditionType,
+            blocksCount: experiment.blocks.length,
+            totalTrialsInAllBlocks: experiment.blocks.reduce((sum, block) => sum + block.trials.length, 0)
+        });
+
+        // ブロック別の詳細ログ
+        experiment.blocks.forEach((block, index) => {
+            console.log(`ブロック ${index + 1} (ID: ${block.id}):`, {
+                blockNumber: block.blockNumber,
+                trialsCount: block.trials.length,
+                accuracy: block.accuracy,
+                averageRT: block.averageRT,
+                averageRTCorrectOnly: block.averageRTCorrectOnly
+            });
+        });
 
         // 1. 実験レコードを保存/更新
         const experimentRow: Omit<ExperimentRow, 'created_at'> = {
@@ -43,14 +66,25 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
             overall_avg_rt_correct_only: experiment.overallAverageRTCorrectOnly,
         };
 
+        console.log('実験テーブルに保存するデータ:', experimentRow);
+
         const { error: expError } = await supabase
             .from('experiments')
             .upsert(experimentRow);
 
-        if (expError) throw expError;
+        if (expError) {
+            console.error('実験テーブル保存エラー:', expError);
+            throw expError;
+        }
+
+
+        console.log('✅ 実験テーブル保存完了');
 
         // 2. ブロックデータを保存
-        for (const block of experiment.blocks) {
+        console.log('\n=== ブロックデータ同期開始 ===');
+        for (const [blockIndex, block] of experiment.blocks.entries()) {
+            console.log(`\n--- ブロック ${blockIndex + 1} / ${experiment.blocks.length} の処理開始 ---`);
+
             const blockRow: Omit<BlockRow, 'created_at'> = {
                 id: block.id,
                 experiment_id: experiment.id,
@@ -63,46 +97,117 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
                 completed_at: block.completedAt.toISOString(),
             };
 
+            console.log(`ブロックテーブルに保存するデータ (ID: ${block.id}):`, {
+                blockNumber: blockRow.block_number,
+                trialCount: blockRow.trial_count,
+                accuracy: blockRow.accuracy,
+                averageRT: blockRow.average_rt,
+                averageRTCorrectOnly: blockRow.average_rt_correct_only
+            });
+
             const { error: blockError } = await supabase
                 .from('blocks')
                 .upsert(blockRow);
 
-            if (blockError) throw blockError;
+            if (blockError) {
+                console.error(`❌ ブロック ${blockIndex + 1} 保存エラー:`, {
+                    blockId: block.id,
+                    blockNumber: block.blockNumber,
+                    error: blockError
+                });
+                throw blockError;
+            }
+
+            console.log(`✅ ブロック ${blockIndex + 1} 保存完了`);
 
             // 3. 試行データを保存
-            for (const trial of block.trials) {
-                const trialUuid = uuidv5(`${experiment.id}-${block.id}-${trial.id}`, TRIAL_UUID_NAMESPACE);
-                const trialRow: TrialRow = {
-                    id: trialUuid,
-                    block_id: block.id,
+            console.log(`\n--- ブロック ${blockIndex + 1} の試行データ同期開始 ---`);
+            console.log(`保存予定試行数: ${block.trials.length}`);
+
+            for (const [trialIndex, trial] of block.trials.entries()) {
+                console.log(`試行 ${trialIndex + 1}/${block.trials.length} 処理開始 (ID: ${trial.id})`);
+
+                const normalizedReactionTime =
+                    typeof trial.reactionTime === 'number' && !Number.isNaN(trial.reactionTime)
+                        ? Math.round(trial.reactionTime)
+                        : undefined;
+
+                const trialRow: Omit<TrialRow, 'created_at'> = {
+                    id: uuidv5(`${trial.blockId}-trial-${trial.id}`, TRIAL_UUID_NAMESPACE),
+                    block_id: trial.blockId,
                     trial_number: trial.id,
                     word: trial.stimulus.word,
-                    word_type: trial.stimulus.category === 'COLOR_WORD'
-                        ? trial.stimulus.word.toUpperCase()
-                        : 'NONSENSE',
+                    word_type: trial.stimulus.category,
                     ink_color: trial.stimulus.inkColor,
                     is_congruent: trial.stimulus.isCongruent,
                     response_key: trial.responseKey || undefined,
                     chosen_answer: trial.chosenAnswer || undefined,
-                    is_correct: trial.isCorrect || undefined,
-                    reaction_time: trial.reactionTime || undefined,
+                    is_correct: trial.isCorrect !== null ? trial.isCorrect : undefined, // false値を保持
+                    reaction_time: normalizedReactionTime,
                     timestamp: trial.timestamp.toISOString(),
                 };
+
+                console.log(`試行データ:`, {
+                    trialNumber: trialRow.trial_number,
+                    word: trialRow.word,
+                    inkColor: trialRow.ink_color,
+                    isCorrect: trialRow.is_correct,
+                    isCorrectType: typeof trialRow.is_correct,
+                    originalIsCorrect: trial.isCorrect,
+                    originalIsCorrectType: typeof trial.isCorrect,
+                    reactionTime: trialRow.reaction_time
+                });
 
                 const { error: trialError } = await supabase
                     .from('trials')
                     .upsert(trialRow);
 
-                if (trialError) throw trialError;
+                if (trialError) {
+                    console.error(`❌ 試行 ${trialIndex + 1} 保存エラー:`, {
+                        trialId: trial.id,
+                        blockId: block.id,
+                        trialNumber: trial.id,
+                        error: trialError
+                    });
+                    throw trialError;
+                }
+
+                if ((trialIndex + 1) % 10 === 0) {
+                    console.log(`✅ ${trialIndex + 1} 試行保存完了`);
+                }
+            }
+
+            console.log(`✅ ブロック ${blockIndex + 1} の全試行 (${block.trials.length}件) 保存完了`);
+        }
+
+        console.log('\n✅ 全ブロック同期完了');
+
+        if (experiment.completedAt) {
+            const completionField = experiment.conditionType === 'static'
+                ? 'static_completed_at'
+                : 'personalized_completed_at';
+            const updatePayload: Record<string, string> = {
+                [completionField]: experiment.completedAt.toISOString(),
+                updated_at: new Date().toISOString(),
+            };
+            const { error: participantUpdateError } = await supabase
+                .from('participants')
+                .update(updatePayload)
+                .eq('id', experiment.participantId);
+
+            if (participantUpdateError) {
+                console.error('❌ 参加者完了フラグ更新エラー:', participantUpdateError);
+            } else {
+                console.log('✅ 参加者完了フラグを更新しました');
             }
         }
 
         // 同期完了をマーク
-        await updateSyncStatus(experimentId, 'synced');
+        await updateSyncStatus(experiment.id, 'synced');
         return true;
 
     } catch (error) {
-        console.error('Sync failed:', error);
+        console.error('❌ 同期処理全体でエラー:', error);
         await updateSyncStatus(experimentId, 'failed');
         return false;
     }
@@ -124,9 +229,10 @@ export async function saveParticipantToSupabase(participant: {
     motivationStyle: MotivationStyle;
     evaluationFocus: EvaluationFocus;
     language: string;
+    adminMemo?: string | null;
 }): Promise<boolean> {
     try {
-        const participantRow: Omit<ParticipantRow, 'created_at' | 'updated_at'> & { updated_at?: string } = {
+        const participantRow = {
             id: participant.id,
             name: participant.name,
             student_id: participant.studentId,
@@ -139,8 +245,11 @@ export async function saveParticipantToSupabase(participant: {
             motivation_style: participant.motivationStyle,
             evaluation_focus: participant.evaluationFocus,
             language: participant.language,
+            admin_memo: participant.adminMemo ?? null,
+            static_completed_at: null,
+            personalized_completed_at: null,
             updated_at: new Date().toISOString(),
-        };
+        } satisfies Omit<ParticipantRow, 'created_at' | 'updated_at'> & { updated_at?: string };
 
         const { error } = await supabase
             .from('participants')

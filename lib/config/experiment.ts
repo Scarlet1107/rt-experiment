@@ -4,6 +4,7 @@ const DEFAULT_BLOCK_COUNT = 8;
 const DEFAULT_TRIALS_PER_BLOCK = 60;
 const DEFAULT_FEEDBACK_COUNTDOWN_SECONDS = 15;
 const DEFAULT_PRACTICE_TRIAL_COUNT = 10;
+const DEFAULT_FEEDBACK_BUTTON_DELAY_MS = 3000;
 
 const parsePositiveInteger = (value: string | undefined, fallback: number) => {
     if (!value) return fallback;
@@ -54,6 +55,11 @@ const trialTimeLimitRaw = parseNonNegativeInteger(
 
 const trialTimeLimitMs = trialTimeLimitRaw > 0 ? trialTimeLimitRaw : null;
 
+const feedbackButtonDelayMs = parseNonNegativeInteger(
+    process.env.NEXT_PUBLIC_FEEDBACK_BUTTON_DELAY_MS,
+    DEFAULT_FEEDBACK_BUTTON_DELAY_MS
+);
+
 const showProgressDebug = parseBoolean(
     process.env.NEXT_PUBLIC_EXPERIMENT_DEBUG_PROGRESS,
     false
@@ -66,5 +72,6 @@ export const experimentConfig: ExperimentConfig = {
     feedbackCountdownSeconds,
     practiceTrialCount,
     trialTimeLimitMs,
+    feedbackButtonDelayMs,
     showProgressDebug,
 };

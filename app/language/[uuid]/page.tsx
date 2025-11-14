@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Languages, ArrowRight } from 'lucide-react';
+import ReactCountryFlag from "react-country-flag";
 
 interface LanguageSelectorContentProps {
     uuid: string;
@@ -56,7 +57,12 @@ function LanguageSelectorContent({ uuid }: LanguageSelectorContentProps) {
                                 disabled={isLoading}
                                 className="h-auto p-6 flex-col space-y-3 border-muted bg-card hover:border-primary hover:bg-primary/5 transition-all"
                             >
-                                <div className="text-3xl">🇯🇵</div>
+                                <ReactCountryFlag
+                                    countryCode="JP"
+                                    svg
+                                    style={{ width: "4em", height: "3em" }}
+                                    className='border-1'
+                                />
                                 <div className="text-lg font-semibold">
                                     {t.languageSelector.japanese}
                                 </div>
@@ -69,7 +75,12 @@ function LanguageSelectorContent({ uuid }: LanguageSelectorContentProps) {
                                 disabled={isLoading}
                                 className="h-auto p-6 flex-col space-y-3 border-muted bg-card hover:border-primary hover:bg-primary/5 transition-all"
                             >
-                                <div className="text-3xl">🇺🇸</div>
+                                <ReactCountryFlag
+                                    countryCode="US"
+                                    svg
+                                    style={{ width: "4em", height: "3em" }}
+                                    className='border-1'
+                                />
                                 <div className="text-lg font-semibold">
                                     {t.languageSelector.english}
                                 </div>

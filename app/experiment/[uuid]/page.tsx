@@ -103,7 +103,6 @@ interface ParsedFeedback {
 
 const NEXT_TRIAL_DELAY_MS = 500;
 const TRIAL_FEEDBACK_DURATION_MS = NEXT_TRIAL_DELAY_MS;
-const FEEDBACK_ACTION_DELAY_MS = 3000;
 
 function ExperimentContent({ uuid }: ExperimentContentProps) {
     const router = useRouter();
@@ -116,6 +115,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         feedbackCountdownSeconds,
         trialTimeLimitMs,
         showProgressDebug,
+        feedbackButtonDelayMs,
     } = experimentConfig;
 
     // 実験全体の状態
@@ -135,6 +135,8 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     useEffect(() => {
         blockResultsRef.current = blockResults;
     }, [blockResults]);
+
+    // currentBlockTrialsRefは各setCurrentBlockTrials内で同期的に更新
 
     // フィードバック関連
     const [blockFeedback, setBlockFeedback] = useState<string>('');
@@ -161,13 +163,16 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     const trialTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const trialTimeoutHandlerRef = useRef<(trial: CurrentTrial) => void>(() => { });
     const feedbackActionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const prepareTrialInProgressRef = useRef(false); // 重複実行防止フラグ
+    const recordTrialInProgressRef = useRef(false); // 試行記録重複防止フラグ
+    const currentBlockTrialsRef = useRef<TrialResult[]>([]); // 最新の試行配列を保持
 
     // キー対応表
     const KEY_TO_ANSWER: Record<KeyCode, AnswerType> = useMemo(() => ({
-        'F': 'RED',
-        'J': 'GREEN',
-        'K': 'BLUE',
-        'D': 'OTHER'
+        'S': 'RED',
+        'K': 'GREEN',
+        'L': 'BLUE',
+        'A': 'OTHER'
     }), []);
 
     // 色の表示用
@@ -268,9 +273,17 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         }
 
         const stimuli = generateBlockStimuli(trialsPerBlock);
+        console.log(`📋 ブロック${nextBlockNumber}の刺激生成完了:`, {
+            blockNumber: nextBlockNumber,
+            trialsPerBlock,
+            generatedStimuliCount: stimuli.length,
+            stimuli: stimuli.map((s, i) => `${i + 1}: ${s.word}(${s.inkColor})`)
+        });
         setBlockStimuli(stimuli);
         setCurrentTrialIndex(0);
         setCurrentBlockTrials([]);
+        // refも同期的にリセット
+        currentBlockTrialsRef.current = [];
         setCurrentTrial(null);
         setCountdownValue(3);
         setCurrentBlock(nextBlockNumber);
@@ -440,18 +453,37 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
 
     // ブロック完了処理
     const completeBlock = useCallback(async () => {
+        // 最新の試行データを使用
+        const currentTrials = currentBlockTrialsRef.current;
+
         // ブロック結果を計算
-        const stats = calculatePerformanceStats(currentBlockTrials);
+        const stats = calculatePerformanceStats(currentTrials);
         const accuracy = Math.round(stats.accuracy);
         const avgRTAll = stats.averageRT;
         const avgRTCorrectOnly = stats.averageRTCorrectOnly;
+
+        console.log(`🏁 ブロック${currentBlock}完了処理開始:`, {
+            currentTrialsCount: currentTrials.length,
+            expectedTrials: trialsPerBlock,
+            correctTrials: stats.correctTrials,
+            incorrectTrials: stats.incorrectTrials,
+            timeoutTrials: stats.timeoutTrials,
+            accuracy: stats.accuracy,
+            timeoutRate: stats.timeoutRate,
+            trials: currentTrials.map(t => ({
+                id: t.id,
+                stimulus: t.stimulus.word,
+                isCorrect: t.isCorrect,
+                responseType: t.isCorrect === true ? 'correct' : t.isCorrect === false ? 'incorrect' : 'timeout'
+            }))
+        });
 
         const experimentId = `${uuid}-${conditionType}`;
         const blockResult: BlockResult = {
             id: `${experimentId}-block-${currentBlock}`,
             blockNumber: currentBlock,
             experimentId,
-            trials: currentBlockTrials,
+            trials: currentTrials,
             accuracy,
             averageRT: avgRTAll,
             averageRTCorrectOnly: avgRTCorrectOnly,
@@ -470,23 +502,50 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
 
         setBlockFeedback(feedbackText);
         setExperimentState('feedback');
-    }, [conditionType, currentBlockTrials, currentBlock, uuid, resolveBlockFeedback]);
+    }, [conditionType, currentBlock, uuid, resolveBlockFeedback, trialsPerBlock]);
 
     // 次の試行を準備
     const prepareNextTrial = useCallback(async (stimuli: StroopStimulus[], trialIndex: number, blockNum: number) => {
+        // 重複実行防止
+        if (prepareTrialInProgressRef.current) {
+            console.log(`🚫 prepareNextTrial重複実行をスキップ: ブロック${blockNum}, 試行インデックス${trialIndex}`);
+            return;
+        }
+        prepareTrialInProgressRef.current = true;
+
+        console.log(`🎯 prepareNextTrial呼び出し: ブロック${blockNum}, 試行インデックス${trialIndex}`, {
+            trialIndex,
+            stimuliLength: stimuli.length,
+            willCompleteBlock: trialIndex >= stimuli.length,
+            currentBlockTrialsLength: currentBlockTrialsRef.current.length
+        });
+
         if (trialIndex >= stimuli.length) {
             // ブロック完了
+            console.log(`🏁 ブロック${blockNum}完了 - completeBlock()呼び出し`, {
+                trialIndex,
+                stimuliLength: stimuli.length,
+                currentBlockTrialsLength: currentBlockTrialsRef.current.length
+            });
+            prepareTrialInProgressRef.current = false;
             await completeBlock();
             return;
         }
 
         const stimulus = stimuli[trialIndex];
+        const experimentId = `${uuid}-${conditionType}`;
         const trial: CurrentTrial = {
-            blockId: `block-${blockNum}`,
+            blockId: `${experimentId}-block-${blockNum}`,
             trialNumber: trialIndex + 1,
             stimulus,
             startTime: 0 // 実際の開始時に設定
         };
+
+        console.log(`▶️ 新しい試行開始: ブロック${blockNum}, 試行${trialIndex + 1}/${stimuli.length}`, {
+            stimulus: stimulus.word,
+            inkColor: stimulus.inkColor,
+            blockId: trial.blockId
+        });
 
         setCurrentTrial(trial);
         hasRespondedRef.current = false;
@@ -497,8 +556,9 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             scheduleTrialTimer(() => {
                 trialTimeoutHandlerRef.current?.(trial);
             });
+            prepareTrialInProgressRef.current = false; // フラグをリセット
         }, 500);
-    }, [completeBlock, scheduleTrialTimer]);
+    }, [completeBlock, scheduleTrialTimer, uuid, conditionType]);
 
     const handleTrialTimeout = useCallback((timedOutTrial: CurrentTrial) => {
         if (!trialTimeLimitMs || hasRespondedRef.current) return;
@@ -506,26 +566,52 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         hasRespondedRef.current = true;
         clearTrialTimeout();
 
+        const trialId = currentTrialIndex + 1; // currentTrialIndexを基準に設定
+        console.log(`⏰ タイムアウト試行記録: ブロック${currentBlock}, 試行${trialId}/${trialsPerBlock}`, {
+            currentTrialIndex,
+            currentBlockTrialsLength: currentBlockTrialsRef.current.length,
+            trialId,
+            blockId: timedOutTrial.blockId,
+            stimulus: timedOutTrial.stimulus.word
+        });
+
         const trialResult: TrialResult = {
-            id: currentBlockTrials.length + 1,
+            id: trialId,
             blockId: timedOutTrial.blockId,
             stimulus: timedOutTrial.stimulus,
             responseKey: null,
             chosenAnswer: null,
-            isCorrect: false,
+            isCorrect: null, // タイムアウト時はnull
             reactionTime: trialTimeLimitMs,
             timestamp: new Date(),
         };
 
-        setCurrentBlockTrials(prev => [...prev, trialResult]);
+        setCurrentBlockTrials(prev => {
+            const updated = [...prev, trialResult];
+            // 同期的にrefも更新（タイムアウト時も確実に）
+            currentBlockTrialsRef.current = updated;
+            console.log(`📊 ブロック${currentBlock}の試行配列更新（タイムアウト）:`, {
+                beforeLength: prev.length,
+                afterLength: updated.length,
+                newTrialId: trialResult.id,
+                refUpdated: currentBlockTrialsRef.current.length
+            });
+            return updated;
+        });
         showTrialFeedback('incorrect');
 
         setTimeout(async () => {
             const nextIndex = currentTrialIndex + 1;
+            console.log(`⏭️ 次の試行準備（タイムアウト後）: インデックス${nextIndex} (ブロック${currentBlock})`, {
+                currentTrialIndex,
+                nextIndex,
+                stimuliLength: blockStimuli.length,
+                willCompleteBlock: nextIndex >= blockStimuli.length
+            });
             setCurrentTrialIndex(nextIndex);
             await prepareNextTrial(blockStimuli, nextIndex, currentBlock);
         }, NEXT_TRIAL_DELAY_MS);
-    }, [trialTimeLimitMs, clearTrialTimeout, currentBlockTrials.length, showTrialFeedback, currentTrialIndex, blockStimuli, currentBlock, prepareNextTrial]);
+    }, [trialTimeLimitMs, clearTrialTimeout, showTrialFeedback, currentTrialIndex, blockStimuli, currentBlock, prepareNextTrial, trialsPerBlock]);
 
     trialTimeoutHandlerRef.current = handleTrialTimeout;
 
@@ -563,13 +649,34 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
     const recordTrialResult = useCallback(async (responseKey: KeyCode, reactionTime: number) => {
         if (!currentTrial || hasRespondedRef.current) return;
 
+        // 重複記録防止
+        if (recordTrialInProgressRef.current) {
+            console.log(`🚫 試行記録重複実行をスキップ: ブロック${currentBlock}, 試行${currentTrialIndex + 1}`);
+            return;
+        }
+        recordTrialInProgressRef.current = true;
+
         hasRespondedRef.current = true;
         clearTrialTimeout();
         const chosenAnswer = KEY_TO_ANSWER[responseKey];
         const isCorrect = chosenAnswer === currentTrial.stimulus.correctAnswer;
 
+        const trialId = currentTrialIndex + 1; // currentTrialIndexを基準に設定
+        console.log(`🔍 試行記録: ブロック${currentBlock}, 試行${trialId}/${trialsPerBlock}`, {
+            currentTrialIndex,
+            currentBlockTrialsLength: currentBlockTrialsRef.current.length,
+            trialId,
+            blockId: currentTrial.blockId,
+            stimulus: currentTrial.stimulus.word,
+            responseKey,
+            chosenAnswer,
+            isCorrect,
+            isCorrectType: typeof isCorrect,
+            reactionTime
+        });
+
         const trialResult: TrialResult = {
-            id: currentBlockTrials.length + 1,
+            id: trialId,
             blockId: currentTrial.blockId,
             stimulus: currentTrial.stimulus,
             responseKey,
@@ -579,16 +686,34 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             timestamp: new Date()
         };
 
-        setCurrentBlockTrials(prev => [...prev, trialResult]);
+        setCurrentBlockTrials(prev => {
+            const updated = [...prev, trialResult];
+            // 同期的にrefも更新（確実にタイミングを制御）
+            currentBlockTrialsRef.current = updated;
+            console.log(`📊 ブロック${currentBlock}の試行配列更新:`, {
+                beforeLength: prev.length,
+                afterLength: updated.length,
+                newTrialId: trialResult.id,
+                refUpdated: currentBlockTrialsRef.current.length
+            });
+            return updated;
+        });
         showTrialFeedback(isCorrect ? 'correct' : 'incorrect');
 
         // 次の試行へ
         setTimeout(async () => {
             const nextIndex = currentTrialIndex + 1;
+            console.log(`⏭️ 次の試行準備: インデックス${nextIndex} (ブロック${currentBlock})`, {
+                currentTrialIndex,
+                nextIndex,
+                stimuliLength: blockStimuli.length,
+                willCompleteBlock: nextIndex >= blockStimuli.length
+            });
             setCurrentTrialIndex(nextIndex);
             await prepareNextTrial(blockStimuli, nextIndex, currentBlock);
+            recordTrialInProgressRef.current = false; // フラグをリセット
         }, NEXT_TRIAL_DELAY_MS);
-    }, [currentTrial, hasRespondedRef, KEY_TO_ANSWER, currentBlockTrials.length, currentTrialIndex, blockStimuli, currentBlock, prepareNextTrial, showTrialFeedback, clearTrialTimeout]);
+    }, [currentTrial, hasRespondedRef, KEY_TO_ANSWER, currentTrialIndex, blockStimuli, currentBlock, prepareNextTrial, showTrialFeedback, clearTrialTimeout, trialsPerBlock]);
 
     // 実験完了処理
     const completeExperiment = useCallback(async () => {
@@ -660,6 +785,19 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
             sessionStorage.removeItem(pendingExperimentKey);
         }
 
+        try {
+            await fetch(`/api/participants/${uuid}/completion`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    condition: conditionType,
+                    completedAt: completedAt.toISOString()
+                })
+            });
+        } catch (error) {
+            console.error('Failed to update Supabase completion status:', error);
+        }
+
         router.push(`/complete/${uuid}?condition=${conditionType}&saveStatus=${saveStatus}`);
     }, [conditionType, participantInfo?.language, router, uuid, language, totalTrials, trialsPerBlock]);
 
@@ -706,16 +844,16 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         setIsFeedbackActionAvailable(false);
         feedbackActionTimerRef.current = setTimeout(() => {
             setIsFeedbackActionAvailable(true);
-        }, FEEDBACK_ACTION_DELAY_MS);
+        }, feedbackButtonDelayMs);
 
         return clearFeedbackActionTimer;
-    }, [clearFeedbackActionTimer, currentBlock, experimentState]);
+    }, [clearFeedbackActionTimer, currentBlock, experimentState, feedbackButtonDelayMs]);
 
     useEffect(() => {
         const handlePreExperimentKey = (event: KeyboardEvent) => {
             if (experimentState !== 'preparation' || event.repeat) return;
             const key = event.key.toUpperCase() as KeyCode;
-            if (['F', 'J', 'K', 'D'].includes(key)) {
+            if (['A', 'S', 'K', 'L'].includes(key)) {
                 event.preventDefault();
                 handleExperimentStart();
             }
@@ -732,7 +870,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         const handleKeyPress = (event: KeyboardEvent) => {
             const key = event.key.toUpperCase() as KeyCode;
 
-            if (['F', 'J', 'K', 'D'].includes(key) && !hasRespondedRef.current) {
+            if (['A', 'S', 'K', 'L'].includes(key) && !hasRespondedRef.current) {
                 const reactionTime = performance.now() - trialStartRef.current;
                 recordTrialResult(key, reactionTime);
             }
@@ -748,7 +886,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
         const handleFeedbackHotkey = (event: KeyboardEvent) => {
             if (event.repeat) return;
             const key = event.key.toUpperCase() as KeyCode;
-            if (['D', 'F', 'J', 'K'].includes(key)) {
+            if (['A', 'S', 'K', 'L'].includes(key)) {
                 event.preventDefault();
                 advanceAfterFeedback();
             }
@@ -907,8 +1045,8 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                                 </Button>
                                 <p className="text-xs text-muted-foreground">
                                     {language === 'ja'
-                                        ? 'D / F / J / K のいずれかを押しても開始できます'
-                                        : 'Press any of D / F / J / K to start as well.'}
+                                        ? 'A / S / K / L のいずれかを押しても開始できます'
+                                        : 'Press any of A / S / K / L to start as well.'}
                                 </p>
                                 {startError && (
                                     <p className="text-sm text-red-600">
@@ -985,25 +1123,25 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                             <CardContent className="p-4">
                                 <div className="grid grid-cols-4 gap-4 text-center">
                                     <div className="space-y-2">
-                                        <Badge variant="outline" className="text-lg p-2">D</Badge>
+                                        <Badge variant="outline" className="text-lg p-2">A</Badge>
                                         <p className="text-sm text-muted-foreground">
                                             {language === 'ja' ? 'その他' : 'Other'}
                                         </p>
                                     </div>
                                     <div className="space-y-2">
-                                        <Badge variant="outline" className="text-lg p-2">F</Badge>
+                                        <Badge variant="outline" className="text-lg p-2">S</Badge>
                                         <p className="text-sm text-muted-foreground">
                                             {language === 'ja' ? '赤色' : 'Red'}
                                         </p>
                                     </div>
                                     <div className="space-y-2">
-                                        <Badge variant="outline" className="text-lg p-2">J</Badge>
+                                        <Badge variant="outline" className="text-lg p-2">K</Badge>
                                         <p className="text-sm text-muted-foreground">
                                             {language === 'ja' ? '緑色' : 'Green'}
                                         </p>
                                     </div>
                                     <div className="space-y-2">
-                                        <Badge variant="outline" className="text-lg p-2">K</Badge>
+                                        <Badge variant="outline" className="text-lg p-2">L</Badge>
                                         <p className="text-sm text-muted-foreground">
                                             {language === 'ja' ? '青色' : 'Blue'}
                                         </p>
@@ -1130,7 +1268,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                                                 </Button>
                                                 <p className="text-xs text-muted-foreground">
                                                     {language === 'ja'
-                                                        ? 'D / F / J / K のいずれかを押しても進めます'
+                                                        ? 'A / S / K / L のいずれかを押しても進めます'
                                                         : 'You can also press D, F, J, or K to continue.'}
                                                 </p>
                                             </>

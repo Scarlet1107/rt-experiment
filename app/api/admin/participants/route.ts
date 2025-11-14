@@ -51,7 +51,7 @@ export async function POST() {
 
         const { data, error } = await supabase
             .from('participants')
-            .insert({ id: participantId, language: 'ja' })
+            .insert({ id: participantId, language: 'ja', admin_memo: null })
             .select('*, experiments(*, blocks(*))')
             .single();
 

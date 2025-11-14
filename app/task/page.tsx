@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 type Color = "RED" | "BLUE" | "GREEN";
 type WordType = Color | "NONSENSE";
-type KeyCode = "F" | "J" | "K" | "D";
+type KeyCode = "A" | "S" | "K" | "L";
 
 type Trial = {
   id: number;
@@ -33,10 +33,10 @@ const COLORS: Color[] = ["RED", "BLUE", "GREEN"];
 const NONSENSE_WORDS = ["cat", "dog", "book", "desk", "chair", "lamp", "box", "pen", "cup", "hat"];
 
 const KEY_TO_ANSWER: Record<KeyCode, Color | "OTHER"> = {
-  F: "RED",
-  J: "GREEN",
-  K: "BLUE",
-  D: "OTHER",
+  A: "OTHER",
+  S: "RED",
+  K: "GREEN",
+  L: "BLUE",
 };
 
 const COLOR_TO_HEX: Record<Color, string> = {
@@ -145,7 +145,7 @@ export default function StroopTaskPage() {
       }
 
       const key = event.key.toUpperCase() as KeyCode;
-      if (!["F", "J", "K", "D"].includes(key)) {
+      if (!["A", "S", "K", "L"].includes(key)) {
         return;
       }
 

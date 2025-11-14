@@ -20,6 +20,49 @@ function shuffleArray<T>(array: T[]): T[] {
     return shuffled;
 }
 
+const isSameStimulus = (a: StroopStimulus, b: StroopStimulus) =>
+    a.word === b.word &&
+    a.inkColor === b.inkColor &&
+    a.correctAnswer === b.correctAnswer &&
+    a.category === b.category;
+
+function shuffleWithoutImmediateRepeats(stimuli: StroopStimulus[]): StroopStimulus[] {
+    if (stimuli.length <= 1) {
+        return [...stimuli];
+    }
+
+    const ordered = shuffleArray(stimuli);
+
+    for (let i = 1; i < ordered.length; i++) {
+        if (!isSameStimulus(ordered[i], ordered[i - 1])) continue;
+
+        let swapIndex = i + 1;
+        while (swapIndex < ordered.length && isSameStimulus(ordered[swapIndex], ordered[i])) {
+            swapIndex++;
+        }
+
+        if (swapIndex < ordered.length) {
+            [ordered[i], ordered[swapIndex]] = [ordered[swapIndex], ordered[i]];
+        } else {
+            for (let candidate = 0; candidate < i; candidate++) {
+                const prev = candidate > 0 ? ordered[candidate - 1] : undefined;
+                const next = ordered[candidate + 1];
+                if (
+                    !isSameStimulus(ordered[candidate], ordered[i]) &&
+                    !isSameStimulus(ordered[candidate], ordered[i - 1]) &&
+                    (!prev || !isSameStimulus(prev, ordered[i])) &&
+                    (!next || !isSameStimulus(next, ordered[i]))
+                ) {
+                    [ordered[i], ordered[candidate]] = [ordered[candidate], ordered[i]];
+                    break;
+                }
+            }
+        }
+    }
+
+    return ordered;
+}
+
 function buildBaseStimuliSet(): StroopStimulus[] {
     const stimuli: StroopStimulus[] = [];
 
@@ -76,7 +119,7 @@ export function generateBlockStimuli(targetCount = experimentConfig.trialsPerBlo
         stimuli.push(...shuffleArray(baseStimuli).slice(0, remainder));
     }
 
-    return shuffleArray(stimuli);
+    return shuffleWithoutImmediateRepeats(stimuli);
 }
 
 /**

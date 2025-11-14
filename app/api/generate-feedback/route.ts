@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createServerClient } from '@supabase/ssr';
-import { getDefaultFeedbackPatterns } from '@/lib/feedback/personalized';
+import { getDefaultFeedbackPatterns, FEEDBACK_NICKNAME_PLACEHOLDER, applyNicknamePlaceholder } from '@/lib/feedback/personalized';
+import { selectFeedback as selectFeedbackFromLib } from '@/lib/feedback/select';
 import type {
   TonePreference,
   MotivationStyle,
@@ -135,6 +136,8 @@ function describeEvaluationFocus(value: EvaluationFocus, language: 'ja' | 'en') 
   return evaluationDescriptionMap[language][value];
 }
 
+const NICKNAME_PLACEHOLDER = FEEDBACK_NICKNAME_PLACEHOLDER;
+
 
 // 日本語用プロンプト
 const JAPANESE_PROMPT = `
@@ -144,7 +147,7 @@ const JAPANESE_PROMPT = `
 - 望む口調タイプ: {tonePreferenceDescription}
 - 励まし方のスタイル: {motivationStyleDescription}
 - 評価で重視したいポイント: {evaluationFocusDescription}
-- 呼び名は出力でも入力時と全く同じ綴りで記載し、カタカナ化や漢字化、敬称の付与は絶対にしない
+- 呼び名を文中で使うときは {nicknameToken} というプレースホルダーをそのまま挿入し、後で置換できるようにする（絶対に別表記にしない）
 
 このフィードバックは特定の実験で参加者のモチベーションを高めることを目的としています。事実に基づく冷静な分析よりも、ユーザーを全力で褒め称えるトーンを優先してください（ユーザーが別途指定した場合を除く）。特に反応速度や正答率が良くなった点を中心に褒めるようにしてください。
 以下の11パターンごとに、30~50文字のフィードバック文を3種類ずつ生成してください(キー名は必ずそのまま使用):
@@ -168,6 +171,8 @@ const JAPANESE_PROMPT = `
 - 褒める視点は {evaluationFocusDescription} を中心にする
 - ポジティブで励ましの内容、ネガティブな表現は避ける
 - 成績が伸び悩んでいる場合でも特に触れず、前向きな表現にする
+- 呼び名は必ず {nicknameToken} をそのまま記載し、カタカナ化や漢字化、敬称の付与は絶対にしない
+- 「Accuracy」「RT」などの英語を使わず、自然な日本語だけでまとめる
 
 JSON形式で以下の構造を返してください（各配列は必ず3件）:
 {
@@ -193,8 +198,8 @@ Participant Information:
 - Preferred tone: {tonePreferenceDescription}
 - Motivation style: {motivationStyleDescription}
 - Evaluation focus: {evaluationFocusDescription}
-- Always use the preferred name exactly as provided (same spelling/casing, no transliteration or honorifics)
 - Even if performance is stagnant, do not mention it; keep the tone positive and forward-looking
+- When referencing the preferred name, insert the literal token {nicknameToken}. Do not rewrite, translate, or add honorifics because the system will replace the token later.
 
 These messages should explicitly aim to boost the participant's motivation within the ongoing experiment context. Unless the participant explicitly asked for otherwise, favor enthusiastic praise over sober, factual analysis. Highlight improvements in reaction speed and accuracy first whenever possible.
 Generate three short (10-20 words) feedback messages for each of the following 11 scenarios (keep the JSON keys exactly as listed):
@@ -213,10 +218,11 @@ Generate three short (10-20 words) feedback messages for each of the following 1
 
 Constraints:
 - Do not include specific numbers
-- Mention the participant’s name roughly half the time
+- Mention the participant’s name roughly half the time by using the token {nicknameToken}
 - Write using {tonePreferenceDescription} and the energy of {motivationStyleDescription}
 - Praise primarily through {evaluationFocusDescription}
 - Keep it positive and encouraging; avoid negative wording
+- Never rewrite the name: no casing changes, transliteration, or honorifics—only use {nicknameToken}
 
 Output JSON with this structure (each array must contain exactly 3 messages):
 {
@@ -258,7 +264,8 @@ export async function POST(request: NextRequest) {
       .replace('{preferredPraise}', participantInfo.preferredPraise)
       .replace(/{tonePreferenceDescription}/g, toneDescription)
       .replace(/{motivationStyleDescription}/g, motivationDescription)
-      .replace(/{evaluationFocusDescription}/g, evaluationDescription);
+      .replace(/{evaluationFocusDescription}/g, evaluationDescription)
+      .replace(/{nicknameToken}/g, NICKNAME_PLACEHOLDER);
 
     console.log('Generating feedback patterns for:', participantInfo.nickname);
 
@@ -276,9 +283,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (existingRecord?.patterns && !force) {
+      const resolvedPatterns = applyNicknamePlaceholder(
+        existingRecord.patterns as FeedbackPattern,
+        participantInfo.nickname
+      );
       return NextResponse.json({
         success: true,
-        feedbackPatterns: existingRecord.patterns as FeedbackPattern,
+        feedbackPatterns: resolvedPatterns,
         participantId,
         cached: true,
       });
@@ -355,13 +366,15 @@ export async function POST(request: NextRequest) {
       usedFallback = true;
     }
 
+    const resolvedPatterns = applyNicknamePlaceholder(feedbackPatterns, participantInfo.nickname);
+
     const { error: upsertError } = await supabaseAdmin
       .from('feedback_patterns')
       .upsert({
         id: participantId,
         participant_id: participantId,
         language: participantInfo.language,
-        patterns: feedbackPatterns,
+        patterns: resolvedPatterns,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'participant_id' });
 
@@ -371,7 +384,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      feedbackPatterns,
+      feedbackPatterns: resolvedPatterns,
       participantId,
       fallback: usedFallback,
     });
@@ -388,72 +401,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-const RT_CHANGE_THRESHOLD = 30;
-const RT_STRONG_THRESHOLD = 80;
-const ACC_CHANGE_THRESHOLD = 2;
-const ACC_STRONG_THRESHOLD = 5;
-
-function determineScenarioKey(
-  currentBlock: { accuracy: number; averageRT: number },
-  previousBlock: { accuracy: number; averageRT: number } | null
-): FeedbackScenarioKey {
-  if (!previousBlock) {
-    return 'rt_same_acc_same';
-  }
-
-  const rtDiff = currentBlock.averageRT - previousBlock.averageRT;
-  const accuracyDiff = currentBlock.accuracy - previousBlock.accuracy;
-
-  const rtImproved = rtDiff <= -RT_CHANGE_THRESHOLD;
-  const rtStrongImproved = rtDiff <= -RT_STRONG_THRESHOLD;
-  const rtDeclined = rtDiff >= RT_CHANGE_THRESHOLD;
-  const rtStrongDeclined = rtDiff >= RT_STRONG_THRESHOLD;
-
-  const accUp = accuracyDiff >= ACC_CHANGE_THRESHOLD;
-  const accStrongUp = accuracyDiff >= ACC_STRONG_THRESHOLD;
-  const accDown = accuracyDiff <= -ACC_CHANGE_THRESHOLD;
-  const accStrongDown = accuracyDiff <= -ACC_STRONG_THRESHOLD;
-
-  if (rtStrongImproved && accStrongUp) {
-    return 'rt_short_acc_up_synergy';
-  }
-
-  if (rtStrongDeclined && accStrongDown) {
-    return 'rt_slow_acc_down_fatigue';
-  }
-
-  if (rtImproved) {
-    if (accUp) return 'rt_short_acc_up';
-    if (accDown) return 'rt_short_acc_down';
-    return 'rt_short_acc_same';
-  }
-
-  if (rtDeclined) {
-    if (accUp) return 'rt_slow_acc_up';
-    if (accDown) return 'rt_slow_acc_down';
-    return 'rt_slow_acc_same';
-  }
-
-  if (accUp) return 'rt_same_acc_up';
-  if (accDown) return 'rt_same_acc_down';
-  return 'rt_same_acc_same';
-}
-
 // フィードバック選択ロジック
 export function selectFeedback(
   currentBlock: { accuracy: number; averageRT: number },
   previousBlock: { accuracy: number; averageRT: number } | null,
   patterns: FeedbackPattern
 ): string {
-  const scenario = determineScenarioKey(currentBlock, previousBlock);
-  const messages = patterns[scenario];
-  const fallback = patterns.rt_same_acc_same;
-  return randomSelect(messages && messages.length > 0 ? messages : fallback);
-}
-
-function randomSelect<T>(array: T[]): T {
-  if (!array || array.length === 0) {
-    return 'Keep going! You got this!' as T;
-  }
-  return array[Math.floor(Math.random() * array.length)];
+  return selectFeedbackFromLib(currentBlock, previousBlock, patterns);
 }

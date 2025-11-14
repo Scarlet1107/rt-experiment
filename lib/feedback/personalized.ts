@@ -1,4 +1,4 @@
-import { selectFeedback } from '../../app/api/generate-feedback/route';
+import { selectFeedback } from '@/lib/feedback/select';
 import type {
   TonePreference,
   MotivationStyle,
@@ -7,6 +7,21 @@ import type {
 } from '@/types';
 
 export type { FeedbackPattern };
+
+export const FEEDBACK_NICKNAME_PLACEHOLDER = '__NICKNAME__';
+
+export function applyNicknamePlaceholder(patterns: FeedbackPattern, nickname: string): FeedbackPattern {
+  const safeNickname = nickname ?? '';
+  const replaceToken = (message: string) =>
+    message.replaceAll(FEEDBACK_NICKNAME_PLACEHOLDER, safeNickname);
+
+  return Object.fromEntries(
+    Object.entries(patterns).map(([key, messages]) => [
+      key,
+      messages.map(replaceToken),
+    ])
+  ) as FeedbackPattern;
+}
 
 export interface ParticipantInfo {
   id?: string;
@@ -37,7 +52,7 @@ export async function getOrGenerateFeedbackPatterns(
   const cached = getFeedbackPatternsFromCache(participantInfo.nickname);
   if (cached) {
     console.log('Using cached feedback patterns for:', participantInfo.nickname);
-    return cached;
+    return applyNicknamePlaceholder(cached, participantInfo.nickname);
   }
 
   // API経由で生成
@@ -69,16 +84,20 @@ export async function getOrGenerateFeedbackPatterns(
       throw new Error('Invalid API response format');
     }
 
+    const resolvedPatterns = applyNicknamePlaceholder(data.feedbackPatterns, participantInfo.nickname);
     // キャッシュに保存
-    saveFeedbackPatternsToCache(participantInfo.nickname, data.feedbackPatterns);
+    saveFeedbackPatternsToCache(participantInfo.nickname, resolvedPatterns);
 
-    return data.feedbackPatterns;
+    return resolvedPatterns;
 
   } catch (error) {
     console.error('Failed to generate feedback patterns:', error);
 
     // フォールバック: デフォルトパターンを返す
-    return getDefaultFeedbackPatterns(participantInfo.language);
+    const fallback = getDefaultFeedbackPatterns(participantInfo.language);
+    const resolvedFallback = applyNicknamePlaceholder(fallback, participantInfo.nickname);
+    saveFeedbackPatternsToCache(participantInfo.nickname, resolvedFallback);
+    return resolvedFallback;
   }
 }
 
@@ -138,118 +157,118 @@ export function getDefaultFeedbackPatterns(language: 'ja' | 'en'): FeedbackPatte
   if (language === 'ja') {
     return {
       rt_short_acc_up_synergy: [
-        "RTも正確さも大幅アップ！理想の波に乗ってるよ。",
-        "速さとAccuracyが同時に跳ね上がって最高の状態！",
-        "スピードと精度の両方が噛み合っていて素晴らしい！"
+        "速さも正確さも噛み合っていて最高の波に乗っているよ。",
+        "集中がきゅっとまとまって結果に表れている。今のリズムを大事にしよう。",
+        `${FEEDBACK_NICKNAME_PLACEHOLDER}の判断が冴えていて、数字が一気に伸びているね。`
       ],
       rt_slow_acc_down_fatigue: [
-        "少し疲れが出てるかも。深呼吸して気持ちを切り替えよう。",
-        "RTもAccuracyも下がったので、短い休憩でリセットしよう。",
-        "集中が途切れているサイン。姿勢を整えて整え直そう。"
+        "少しペースを落として深呼吸しよう。軽く背伸びするだけでも感覚が戻るよ。",
+        "画面の距離や姿勢を整えてリズムを立て直してみよう。焦らなくて大丈夫。",
+        `${FEEDBACK_NICKNAME_PLACEHOLDER}の集中力を温存するためにも、こまめにリラックスしていこう。`
       ],
       rt_short_acc_same: [
-        "反応が速くなっているよ！このテンポで正確さも保とう。",
-        "スピードは伸びているので、丁寧さを意識すれば完璧。",
-        "テンポが良くなっているから、その調子で正答率もキープしよう。"
+        "テンポが良くなってきたので、その勢いで正確さもキープしていこう。",
+        "判断が鋭くなっているよ。答える前に一拍置くだけでさらに安定するはず。",
+        `${FEEDBACK_NICKNAME_PLACEHOLDER}の指先がしっかり動いている。あとは丁寧さを添えるだけ。`
       ],
       rt_short_acc_down: [
-        "速さは十分なので、落ち着いてミスを減らしてみよう。",
-        "テンポが上がった分だけ慎重さをプラスしていこう。",
-        "スピードは噛み合っているから、判断を丁寧に戻せば大丈夫。"
+        "スピードは十分なので、画面に視線を固定してからキーを押してみよう。",
+        "勢いがついたぶん、深呼吸を挟んで慎重さをプラスすると安定するよ。",
+        `${FEEDBACK_NICKNAME_PLACEHOLDER}の反射は鋭いから、答える直前に色をもう一度確認しよう。`
       ],
       rt_short_acc_up: [
-        "速さも正確さも着実に伸びていて素晴らしい！",
-        "テンポ良く正解できているので、この流れを続けよう。",
-        "スピードもAccuracyもアップ中。とても良いコンディションだよ。"
+        "速さと正確さの両方が上向きでとても良いリズムだよ。",
+        `${FEEDBACK_NICKNAME_PLACEHOLDER}の判断が冴えている。今のペースを信じて進もう。`,
+        "迷いが減ってきているから、この流れをシンプルに維持しよう。"
       ],
       rt_slow_acc_up: [
-        "慎重さがAccuracyの向上につながっているよ。",
-        "丁寧に取り組んだ結果、正答率が改善しているね。",
-        "ペースを落とした分だけミスが減っていて良い判断だよ。"
+        "丁寧に色を確かめたぶん、正答率がぐっと上がっているよ。",
+        "落ち着いたテンポがうまくハマっている。この慎重さは武器になる。",
+        `${FEEDBACK_NICKNAME_PLACEHOLDER}の観察力が活きている。今の安定感を大切にしよう。`
       ],
       rt_slow_acc_same: [
-        "正確さは保てているから、次はスピードを少し戻してみよう。",
-        "落ち着いたリズムで進められているので、テンポ調整だけ意識しよう。",
-        "慎重モードで安定しているね。呼吸を整えてスピードも取り戻そう。"
+        "丁寧さは保てているから、指先のスピードだけ少し戻してみよう。",
+        "呼吸を整えて肩の力を抜けば、もう少しテンポを上げられそうだよ。",
+        `${FEEDBACK_NICKNAME_PLACEHOLDER}の安定感はそのままに、視線移動を素早くしてみよう。`
       ],
       rt_slow_acc_down: [
-        "ペースが落ちてミスも増えているので、軽くリフレッシュしよう。",
-        "一度肩の力を抜いて、リズムと正確さを同時に整え直そう。",
-        "集中が切れているサイン。短い休憩や姿勢の調整がおすすめ。"
+        "集中し直すために、画面から目を離して軽くストレッチしよう。",
+        "リズムが崩れた時ほど、タイマーを意識せず落ち着くのが近道だよ。",
+        `${FEEDBACK_NICKNAME_PLACEHOLDER}の感覚を取り戻すために、水分補給や姿勢リセットを試してみよう。`
       ],
       rt_same_acc_up: [
-        "安定したリズムのまま正確さが上がっていて頼もしい！",
-        "ペースはそのまま、ミスが減っていてとても良い流れ。",
-        "リズムを崩さずにAccuracyが向上しているよ。"
+        "ペースはそのまま、判断の確かさがぐっと伸びているよ。",
+        `${FEEDBACK_NICKNAME_PLACEHOLDER}の集中がじわじわ効いて、ミスが減ってきている。`,
+        "安定したテンポで丁寧に見極められている。とても良い流れだね。"
       ],
       rt_same_acc_down: [
-        "テンポは安定しているから、視線と判断を丁寧に戻そう。",
-        "リズムはいいので、答える前に1拍置いてミスを減らそう。",
-        "スピードは保てているので、集中だけもう一度整えよう。"
+        "テンポは整っているので、色を読み上げるイメージで一度確認してみよう。",
+        `${FEEDBACK_NICKNAME_PLACEHOLDER}のペースは良いから、視線移動だけ慎重に戻してみよう。`,
+        "答える直前に深呼吸を入れると、判断の精度がまた戻るはず。"
       ],
       rt_same_acc_same: [
-        "安定したパフォーマンスが続いているよ。",
-        "大きな変動なく続けられているので、この土台を活かそう。",
-        "落ち着いた状態をキープできているね。リズムを信じていこう。"
+        "落ち着いたリズムを保てている。この安定感は大きな武器になるよ。",
+        "波が少ない状態で進められているから、自信を持って次に行こう。",
+        `${FEEDBACK_NICKNAME_PLACEHOLDER}のベースがしっかりしている。細かな工夫でさらに伸びるはず。`
       ]
     };
   }
 
   return {
     rt_short_acc_up_synergy: [
-      "Huge boost in both speed and accuracy—perfect synergy!",
-      "RT and accuracy jumped together, this is the sweet spot!",
-      "Fast and precise at the same time. Stellar performance!"
+      `Huge boost in both speed and accuracy—perfect synergy, ${FEEDBACK_NICKNAME_PLACEHOLDER}!`,
+      "Lightning-fast responses with solid accuracy. Keep the streak going!",
+      "Speed and accuracy are rising together. Best-case scenario!"
     ],
     rt_slow_acc_down_fatigue: [
-      "Looks like fatigue. Take a breath and reset your focus.",
-      "Both speed and accuracy dipped, so consider a quick pause.",
-      "Signs of tiredness—reset your posture and regroup."
+      "Energy seems low—pause, stretch, and reset before the next block.",
+      `${FEEDBACK_NICKNAME_PLACEHOLDER}, roll your shoulders and reset those eyes before continuing.`,
+      "This looks like fatigue. Short breaks or posture changes can help."
     ],
     rt_short_acc_same: [
-      "You’re reacting faster! Keep that pace while holding accuracy.",
-      "Speed improved, so just keep the same calm precision.",
-      "Tempo is up, now maintain the same steady accuracy."
+      "Speed is improving! Just keep an eye on accuracy too.",
+      "Nice tempo boost—now pair it with a quick double-check before each key.",
+      `${FEEDBACK_NICKNAME_PLACEHOLDER}, you're moving faster. Stay deliberate to keep accuracy steady.`
     ],
     rt_short_acc_down: [
-      "Speed is great, now slow the mind slightly to reduce slips.",
-      "Quick reactions achieved—add a touch of calm for accuracy.",
-      "You’ve got the tempo, just tighten decisions for fewer errors."
+      "Quick reflexes, but accuracy dipped. Pause for a breath between trials.",
+      "Speed is there—take a beat before answering to avoid slips.",
+      `Great momentum, so re-center your focus right before each response, ${FEEDBACK_NICKNAME_PLACEHOLDER}.`
     ],
     rt_short_acc_up: [
-      "Speed and accuracy are both trending up—fantastic run!",
-      "Quick and precise responses—stay with this rhythm.",
-      "RT and accuracy improving together. Keep pushing!"
+      "Fast and accurate—fantastic groove!",
+      "Tempo feels effortless and precise. Keep trusting it.",
+      `Great combo of speed and accuracy. Stay in this zone, ${FEEDBACK_NICKNAME_PLACEHOLDER}!`
     ],
     rt_slow_acc_up: [
-      "Taking your time paid off with cleaner answers.",
-      "Accuracy improved as you slowed down; now ease the pace back up.",
-      "Being deliberate raised your precision. Great adjustment."
+      "Taking your time paid off—the accuracy bump proves it.",
+      "Deliberate pacing is helping. Trust the careful rhythm.",
+      `${FEEDBACK_NICKNAME_PLACEHOLDER} slowed down just enough to remove mistakes. Smart adjustment!`
     ],
     rt_slow_acc_same: [
-      "Accuracy held steady; gently nudge the pace up again.",
-      "Calm rhythm maintained—now reintroduce a bit more speed.",
-      "Careful approach is stable. Add a touch of tempo when ready."
+      "Accuracy is steady—now gradually nudge the pace back up.",
+      "Calm rhythm works. Add a bit more snap to each key press.",
+      `${FEEDBACK_NICKNAME_PLACEHOLDER}, stability is there. Try lifting your eyes a touch quicker.`
     ],
     rt_slow_acc_down: [
-      "Slower and less accurate—shake it off with a short reset.",
-      "Both metrics dipped, so reset your focus and posture.",
-      "Energy dropped; take a quick break to realign speed and precision."
+      "Both metrics slipped. Take a micro break and reset posture.",
+      "Time to refresh—shake out tension and aim for a lighter touch.",
+      `${FEEDBACK_NICKNAME_PLACEHOLDER}, grab some water and come back with a calmer focus.`
     ],
     rt_same_acc_up: [
-      "Steady pace with rising accuracy—awesome consistency!",
-      "Same rhythm, fewer errors. That’s reliable progress.",
-      "Accuracy climbed without changing tempo—keep that groove."
+      "Same tempo, better accuracy—love the consistency!",
+      "You held the rhythm and sharpened judgment. Keep it rolling.",
+      `Reliability plus improvement. That's a strong combo, ${FEEDBACK_NICKNAME_PLACEHOLDER}.`
     ],
     rt_same_acc_down: [
-      "Pace is steady, so double-check before responding to reduce slips.",
-      "Hold the rhythm but add a breath before answering.",
-      "Speed is there; channel more focus into each decision."
+      "Tempo is fine, but accuracy dipped. Double-check the color before hitting the key.",
+      "Hold the pace while giving yourself a deliberate look at each stimulus.",
+      `${FEEDBACK_NICKNAME_PLACEHOLDER}, speed is steady—recenter focus on color to catch those slips.`
     ],
     rt_same_acc_same: [
-      "Stable run. Keep trusting this baseline.",
-      "No big swings—use this calm state as a launchpad.",
-      "Consistency maintained. When you’re ready, push gently forward."
+      "Steady as she goes. This baseline is solid.",
+      "No big swings—use this consistency as a launchpad.",
+      `Calm execution, ${FEEDBACK_NICKNAME_PLACEHOLDER}. Stay confident and add tweaks when ready.`
     ]
   };
 }

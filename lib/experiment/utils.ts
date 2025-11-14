@@ -25,26 +25,30 @@ export function generateStaticFeedback(
   const blockNumber = blockIndex + 1;
 
   if (language === 'en') {
-    return `Block ${blockNumber} summary
+    let feedback = `Block ${blockNumber} summary
 
 Accuracy: ${accuracy.toFixed(1)}%
-Average reaction time: ${averageRT}ms
+Average reaction time: ${averageRT}ms`;
+    feedback += `
 Blocks completed: ${blockNumber}/${experimentConfig.totalBlocks}`;
+    return feedback;
   }
 
-  return `ブロック ${blockNumber} 結果
+  let feedback = `ブロック ${blockNumber} 結果
 
 正答率: ${accuracy.toFixed(1)}%
-平均反応時間: ${averageRT}ms
+平均反応時間: ${averageRT}ms`;
+  feedback += `
 完了ブロック: ${blockNumber}/${experimentConfig.totalBlocks}`;
+  return feedback;
 }
 
 // カラーキーマッピング
 export const COLOR_KEY_MAP = {
-  'RED': 'f',
-  'GREEN': 'j',
-  'BLUE': 'k',
-  'OTHER': 'd'
+  'RED': 's',
+  'GREEN': 'k',
+  'BLUE': 'l',
+  'OTHER': 'a'
 } as const;
 
 // 色を16進数に変換
@@ -60,10 +64,22 @@ export function calculatePerformanceStats(
 ) {
   const totalTrials = trials.length;
   const correctTrials = trials.filter(t => t.isCorrect === true);
+  const incorrectTrials = trials.filter(t => t.isCorrect === false);
+  const timeoutTrials = trials.filter(t => t.isCorrect === null);
+
+  // 正答率を計算（タイムアウトも含む）
+  const respondedTrials = trials.filter(t => t.isCorrect !== null);
   const accuracy = totalTrials > 0 ? (correctTrials.length / totalTrials) * 100 : 0;
 
+  // タイムアウト率も計算
+  const timeoutRate = totalTrials > 0 ? (timeoutTrials.length / totalTrials) * 100 : 0;
+
   const answeredTrials = trials.filter(
-    t => typeof t.responseKey === 'string' && typeof t.reactionTime === 'number' && (t.reactionTime ?? 0) > 0
+    t =>
+      t.isCorrect !== null &&
+      typeof t.responseKey === 'string' &&
+      typeof t.reactionTime === 'number' &&
+      (t.reactionTime ?? 0) > 0
   );
 
   const allRTs = answeredTrials
@@ -86,10 +102,14 @@ export function calculatePerformanceStats(
     : 0;
 
   return {
-    accuracy,
+    accuracy, // 応答した試行のみでの正答率
+    timeoutRate, // タイムアウト率
     averageRT: Math.round(averageAll),
     averageRTCorrectOnly: Math.round(averageCorrectOnly),
     totalTrials,
-    correctTrials: correctTrials.length
+    correctTrials: correctTrials.length,
+    incorrectTrials: incorrectTrials.length,
+    timeoutTrials: timeoutTrials.length,
+    respondedTrials: respondedTrials.length
   };
 }

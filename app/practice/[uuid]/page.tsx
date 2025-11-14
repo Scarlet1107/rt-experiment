@@ -54,17 +54,17 @@ function PracticeContent({ uuid }: PracticeContentProps) {
     const trialTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const KEY_TO_ANSWER: Record<KeyCode, AnswerType> = useMemo(() => ({
-        F: 'RED',
-        J: 'GREEN',
-        K: 'BLUE',
-        D: 'OTHER',
+        S: 'RED',
+        K: 'GREEN',
+        L: 'BLUE',
+        A: 'OTHER',
     }), []);
 
     const KEY_GUIDE = useMemo(() => [
-        { key: 'D', label: language === 'ja' ? 'その他' : 'Other', color: '#4b5563' },
-        { key: 'F', label: language === 'ja' ? '赤色' : 'Red', color: PRACTICE_COLOR_HEX.RED },
-        { key: 'J', label: language === 'ja' ? '緑色' : 'Green', color: PRACTICE_COLOR_HEX.GREEN },
-        { key: 'K', label: language === 'ja' ? '青色' : 'Blue', color: PRACTICE_COLOR_HEX.BLUE },
+        { key: 'A', label: language === 'ja' ? 'その他' : 'Other', color: '#4b5563' },
+        { key: 'S', label: language === 'ja' ? '赤色' : 'Red', color: PRACTICE_COLOR_HEX.RED },
+        { key: 'K', label: language === 'ja' ? '緑色' : 'Green', color: PRACTICE_COLOR_HEX.GREEN },
+        { key: 'L', label: language === 'ja' ? '青色' : 'Blue', color: PRACTICE_COLOR_HEX.BLUE },
     ], [language]);
 
     const renderColoredKeyGuide = () => (
@@ -172,7 +172,7 @@ function PracticeContent({ uuid }: PracticeContentProps) {
             if (event.repeat || respondedRef.current) return;
 
             const key = event.key.toUpperCase() as KeyCode;
-            if (!['F', 'J', 'K', 'D'].includes(key)) return;
+            if (!['A', 'S', 'K', 'L'].includes(key)) return;
 
             const chosenAnswer = KEY_TO_ANSWER[key];
             const rt = performance.now() - (trialStartRef.current ?? performance.now());
@@ -251,7 +251,7 @@ function PracticeContent({ uuid }: PracticeContentProps) {
         const handleIntroHotkey = (event: KeyboardEvent) => {
             if (event.repeat) return;
             const key = event.key.toUpperCase();
-            if (['D', 'F', 'J', 'K'].includes(key)) {
+            if (['A', 'S', 'K', 'L'].includes(key)) {
                 event.preventDefault();
                 handleStartPractice();
             }
