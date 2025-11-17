@@ -23,12 +23,13 @@ export function generateStaticFeedback(
   language: 'ja' | 'en' = 'ja'
 ): string {
   const blockNumber = blockIndex + 1;
+  const averageRTInSeconds = (averageRT / 1000).toFixed(3);
 
   if (language === 'en') {
     let feedback = `Block ${blockNumber} summary
 
 Accuracy: ${accuracy.toFixed(1)}%
-Average reaction time: ${averageRT}ms`;
+Average reaction time: ${averageRTInSeconds}s`;
     feedback += `
 Blocks completed: ${blockNumber}/${experimentConfig.totalBlocks}`;
     return feedback;
@@ -37,7 +38,7 @@ Blocks completed: ${blockNumber}/${experimentConfig.totalBlocks}`;
   let feedback = `ブロック ${blockNumber} 結果
 
 正答率: ${accuracy.toFixed(1)}%
-平均反応時間: ${averageRT}ms`;
+平均反応時間: ${averageRTInSeconds}秒`;
   feedback += `
 完了ブロック: ${blockNumber}/${experimentConfig.totalBlocks}`;
   return feedback;
@@ -63,20 +64,22 @@ export function calculatePerformanceStats(
   trials: { isCorrect: boolean | null; reactionTime: number | null; responseKey?: string | null }[]
 ) {
   const totalTrials = trials.length;
-  const correctTrials = trials.filter(t => t.isCorrect === true);
-  const incorrectTrials = trials.filter(t => t.isCorrect === false);
+
+  // タイムアウト試行を完全に除外（isCorrect === null のものは全て無視）
+  const validTrials = trials.filter(t => t.isCorrect !== null);
+  const correctTrials = validTrials.filter(t => t.isCorrect === true);
+  const incorrectTrials = validTrials.filter(t => t.isCorrect === false);
   const timeoutTrials = trials.filter(t => t.isCorrect === null);
 
-  // 正答率を計算（タイムアウトも含む）
-  const respondedTrials = trials.filter(t => t.isCorrect !== null);
-  const accuracy = totalTrials > 0 ? (correctTrials.length / totalTrials) * 100 : 0;
+  // 正答率を計算（有効な試行のみで算出）
+  const accuracy = validTrials.length > 0 ? (correctTrials.length / validTrials.length) * 100 : 0;
 
-  // タイムアウト率も計算
+  // タイムアウト率も計算（参考値として）
   const timeoutRate = totalTrials > 0 ? (timeoutTrials.length / totalTrials) * 100 : 0;
 
   const answeredTrials = trials.filter(
     t =>
-      t.isCorrect !== null &&
+      t.isCorrect !== null && // タイムアウト除外
       typeof t.responseKey === 'string' &&
       typeof t.reactionTime === 'number' &&
       (t.reactionTime ?? 0) > 0
@@ -102,14 +105,14 @@ export function calculatePerformanceStats(
     : 0;
 
   return {
-    accuracy, // 応答した試行のみでの正答率
-    timeoutRate, // タイムアウト率
-    averageRT: Math.round(averageAll),
-    averageRTCorrectOnly: Math.round(averageCorrectOnly),
+    accuracy, // 有効試行のみでの正答率
+    timeoutRate, // タイムアウト率（参考値）
+    averageRT: Math.round(averageAll), // タイムアウト除外のRT平均
+    averageRTCorrectOnly: Math.round(averageCorrectOnly), // 正解のみのRT平均
     totalTrials,
     correctTrials: correctTrials.length,
     incorrectTrials: incorrectTrials.length,
     timeoutTrials: timeoutTrials.length,
-    respondedTrials: respondedTrials.length
+    respondedTrials: validTrials.length // タイムアウトを除いた有効試行数
   };
 }
