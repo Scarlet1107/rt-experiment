@@ -1,10 +1,10 @@
 import { experimentConfig } from '@/lib/config/experiment';
 import { StroopStimulus, Color } from '../../types';
 
-// 使用する無意味語（15語固定）
+// 使用する無意味語（12語固定：各色4語ずつ）
 const NONSENSE_WORDS = [
     "bath", "bike", "ghost", "glass", "row", "rat", "cat", "dog",
-    "table", "egg", "door", "tree", "fish", "water", "chair"
+    "table", "egg", "door", "tree"
 ];
 
 // 色の定義
@@ -66,11 +66,11 @@ function shuffleWithoutImmediateRepeats(stimuli: StroopStimulus[]): StroopStimul
 function buildBaseStimuliSet(): StroopStimulus[] {
     const stimuli: StroopStimulus[] = [];
 
-    // 色単語刺激（45試行：各色15試行ずつ）
+    // 色単語刺激（36試行：各色12試行ずつ）
     COLORS.forEach(colorWord => {
         COLORS.forEach(inkColor => {
-            // 各色の組み合わせで5試行ずつ
-            for (let i = 0; i < 5; i++) {
+            // 各色の組み合わせで4試行ずつ
+            for (let i = 0; i < 4; i++) {
                 stimuli.push({
                     word: colorWord.toLowerCase(), // "red", "blue", "green"
                     inkColor: inkColor,
@@ -82,9 +82,9 @@ function buildBaseStimuliSet(): StroopStimulus[] {
         });
     });
 
-    // 無意味語刺激（15試行）
+    // 無意味語刺激（12試行）
     NONSENSE_WORDS.forEach((word, index) => {
-        const inkColor = COLORS[index % 3]; // 5つずつ各色に割り当て
+        const inkColor = COLORS[index % 3]; // 4つずつ各色に割り当て
         stimuli.push({
             word: word,
             inkColor: inkColor,
@@ -99,8 +99,8 @@ function buildBaseStimuliSet(): StroopStimulus[] {
 /**
  * ブロック分の刺激セットを生成
  * 
- * デフォルトは実験設定の試行数（従来は60試行）。設定値が60を超える場合は
- * バランスの取れた60試行のセットを繰り返し、余り分はランダムサンプルで補う。
+ * デフォルトは実験設定の試行数（従来は48試行）。設定値が48を超える場合は
+ * バランスの取れた48試行のセットを繰り返し、余り分はランダムサンプルで補う。
  */
 export function generateBlockStimuli(targetCount = experimentConfig.trialsPerBlock): StroopStimulus[] {
     if (targetCount <= 0) return [];
@@ -169,22 +169,22 @@ export function validateStimuliSet(stimuli: StroopStimulus[]): boolean {
         return false;
     }
 
-    // 従来仕様（60試行）のみ細かなバランスチェックを行う
-    if (experimentConfig.trialsPerBlock === 60) {
-        if (stats.byCorrectAnswer.RED !== 15) return false;
-        if (stats.byCorrectAnswer.BLUE !== 15) return false;
-        if (stats.byCorrectAnswer.GREEN !== 15) return false;
-        if (stats.byCorrectAnswer.OTHER !== 15) return false;
+    // 新仕様（48試行）のみ細かなバランスチェックを行う
+    if (experimentConfig.trialsPerBlock === 48) {
+        if (stats.byCorrectAnswer.RED !== 12) return false;
+        if (stats.byCorrectAnswer.BLUE !== 12) return false;
+        if (stats.byCorrectAnswer.GREEN !== 12) return false;
+        if (stats.byCorrectAnswer.OTHER !== 12) return false;
 
-        if (stats.byInkColor.RED !== 20) return false;
-        if (stats.byInkColor.BLUE !== 20) return false;
-        if (stats.byInkColor.GREEN !== 20) return false;
+        if (stats.byInkColor.RED !== 16) return false;
+        if (stats.byInkColor.BLUE !== 16) return false;
+        if (stats.byInkColor.GREEN !== 16) return false;
 
-        if (stats.byCategory.COLOR_WORD !== 45) return false;
-        if (stats.byCategory.NONSENSE !== 15) return false;
+        if (stats.byCategory.COLOR_WORD !== 36) return false;
+        if (stats.byCategory.NONSENSE !== 12) return false;
 
-        if (stats.congruent !== 15) return false;
-        if (stats.incongruent !== 45) return false;
+        if (stats.congruent !== 12) return false;
+        if (stats.incongruent !== 36) return false;
     }
 
     return true;

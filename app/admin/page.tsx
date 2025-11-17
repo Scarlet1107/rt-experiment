@@ -21,7 +21,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye, BarChart3, Check } from 'lucide-react';
+import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye, BarChart3, Check, Beaker } from 'lucide-react';
 import type { TonePreference, MotivationStyle, EvaluationFocus } from '@/types';
 import { experimentConfig } from '@/lib/config/experiment';
 
@@ -560,6 +560,12 @@ export default function AdminDashboard() {
                             <Link href="/">
                                 <Home className="mr-2 h-4 w-4" />
                                 ホームに戻る
+                            </Link>
+                        </Button>
+                        <Button variant="outline" asChild>
+                            <Link href="/admin/personalized-feedback-debug">
+                                <Beaker className="mr-2 h-4 w-4" />
+                                フィードバック生成デバッグ
                             </Link>
                         </Button>
                         <Button variant="secondary" asChild>
