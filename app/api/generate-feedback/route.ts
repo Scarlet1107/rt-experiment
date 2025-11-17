@@ -147,32 +147,61 @@ const JAPANESE_PROMPT = `
 - 望む口調タイプ: {tonePreferenceDescription}
 - 励まし方のスタイル: {motivationStyleDescription}
 - 評価で重視したいポイント: {evaluationFocusDescription}
-- 呼び名を文中で使うときは {nicknameToken} というプレースホルダーをそのまま挿入し、後で置換できるようにする（絶対に別表記にしない）
+- 呼び名を文中で使うときは {nicknameToken}さん というプレースホルダーをそのまま挿入し、後で置換できるようにする（絶対に別表記にしない）
 
-このフィードバックは特定の実験で参加者のモチベーションを高めることを目的としています。事実に基づく冷静な分析よりも、ユーザーを全力で褒め称えるトーンを優先してください（ユーザーが別途指定した場合を除く）。特に反応速度や正答率が良くなった点を中心に褒めるようにしてください。
-以下の11パターンごとに、30~50文字のフィードバック文を3種類ずつ生成してください(キー名は必ずそのまま使用):
+このフィードバックは、実験の途中で参加者のやる気を保つための「メッセージ」です。
+かたくて論文のような日本語ではなく、自然な会話に近い日本語にしてください。
 
-1. "rt_short_acc_up_synergy": 反応速度が大幅に短縮し正答率も大きく上昇
-2. "rt_slow_acc_down_fatigue": 反応速度が大幅に遅延し正答率も大きく下降
-3. "rt_short_acc_same": 反応速度が短縮、正答率は変化なし
-4. "rt_short_acc_down": 反応速度が短縮、正答率が下降
-5. "rt_short_acc_up": 反応速度が短縮、正答率が上昇（通常パターン）
-6. "rt_slow_acc_up": 反応速度が遅延、正答率が上昇
-7. "rt_slow_acc_same": 反応速度が遅延、正答率は変化なし
-8. "rt_slow_acc_down": 反応速度が遅延、正答率が下降
-9. "rt_same_acc_up": 反応速度変化なし、正答率が上昇
-10. "rt_same_acc_down": 反応速度変化なし、正答率が下降
-11. "rt_same_acc_same": 反応速度も正答率も変化なし
+### 書き方のスタイル
 
-制約:
+- 「〜といえます」「〜を示しています」のような堅い表現は使わない
+- 「あなた」は使わない。主語は省略するか、必要なときだけ {nicknameToken} を主語にする
+- 難しい漢字や専門用語は避け、日常会話でよく使う言葉で書く
+- 絵文字や顔文字は使わない
+
+### 褒め方の方針
+
+- 事実に基づく冷静な分析よりも、参加者を前向きな気持ちにすることを優先する
+- 反応が速くなったこと、正解が増えたことなど、良くなった点をまず褒める
+- 成績が伸び悩んでいる場合でも「下がった」「悪化した」などの言葉は使わず、
+  「ここからまた上げていこう」など前向きな表現に言い換える
+- {evaluationFocusDescription} に合う視点を意識して褒める
+  - self-progress: 「前より」「この前より」など、過去の自分との比較を意識した言い方
+  - social-comparison: 「平均より速そう」「上位に近づいてきた感じ」など、まわりと比べて良さそうに聞こえる言い方
+  - positive-focus: 結果の細かい分析はせず、とにかく良いところだけ短く褒める
+
+### メッセージの長さ
+
+- 各メッセージは「全角50〜70文字」を目安に書く
+- 1つのメッセージは1〜2文までにしてよい
+- 40文字未満の短すぎるメッセージは書かない
+- 文末は「!」をつけてもよい
+
+### 出力するパターン
+
+以下の11パターンごとに、50文字程度のフィードバック文を3種類ずつ生成してください(キー名は必ずそのまま使用):
+
+1. "rt_short_acc_up_synergy": 反応がかなり速くなり、正解も大きく増えた
+2. "rt_slow_acc_down_fatigue": 反応がかなり遅くなり、正解も減っている（疲れや集中切れの状態）
+3. "rt_short_acc_same": 反応は速くなったが、正解は変わらない
+4. "rt_short_acc_down": 反応は速くなったが、正解が少し減っている
+5. "rt_short_acc_up": 反応は速くなり、正解も少し増えている（標準的な改善）
+6. "rt_slow_acc_up": 反応は遅くなったが、正解が増えている
+7. "rt_slow_acc_same": 反応は遅くなったが、正解は変わらない
+8. "rt_slow_acc_down": 反応も遅く、正解も減っている
+9. "rt_same_acc_up": 反応は同じくらいだが、正解が増えている
+10. "rt_same_acc_down": 反応は同じくらいだが、正解が減っている
+11. "rt_same_acc_same": 反応も正解もほぼ変わらない
+
+### 制約（必ず守ること）
+
 - 具体的な数値は含めない
-- 参加者の呼び名を適度に含める（半分程度）
-- {tonePreferenceDescription} で書き、{motivationStyleDescription} のテンションで励ます
-- 褒める視点は {evaluationFocusDescription} を中心にする
-- ポジティブで励ましの内容、ネガティブな表現は避ける
-- 成績が伸び悩んでいる場合でも特に触れず、前向きな表現にする
-- 呼び名は必ず {nicknameToken} をそのまま記載し、カタカナ化や漢字化、敬称の付与は絶対にしない
-- 「Accuracy」「RT」などの英語を使わず、自然な日本語だけでまとめる
+- 参加者の呼び名を、だいたい半分くらいのメッセージで使う
+- 呼び名は必ず {nicknameToken}さん をそのまま記載し、カタカナ化や漢字化は絶対にしない
+- {tonePreferenceDescription} の口調で書き、{motivationStyleDescription} のノリで励ます
+- 「Accuracy」「RT」などの英語は使わず、自然な日本語だけでまとめる
+- ネガティブな表現は避け、常に前向きな言い換えを工夫する
+- 各キーの配列は必ず3件にする
 
 JSON形式で以下の構造を返してください（各配列は必ず3件）:
 {
@@ -326,7 +355,8 @@ export async function POST(request: NextRequest) {
 
     try {
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4.1-nano',
+        model: 'gpt-4.1-mini',
+        temperature: 0.7,
         messages: [
           {
             role: 'system',
@@ -351,6 +381,19 @@ export async function POST(request: NextRequest) {
           }
         }
       });
+
+      // トークン使用量をログ出力
+      const usage = completion.usage;
+      if (usage) {
+        console.log('📊 OpenAI Token Usage:', {
+          participant: participantInfo.nickname,
+          language: participantInfo.language,
+          promptTokens: usage.prompt_tokens,
+          completionTokens: usage.completion_tokens,
+          totalTokens: usage.total_tokens,
+          model: 'gpt-4.1-mini'
+        });
+      }
 
       const feedbackContent = completion.choices[0]?.message?.content;
 
