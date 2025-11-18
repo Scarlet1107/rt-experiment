@@ -19,7 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Play, Brain, Target, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Play, Brain, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { experimentConfig } from '@/lib/config/experiment';
 
@@ -1031,35 +1031,25 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                         </CardHeader>
 
                         <CardContent className="space-y-6">
+                            <div className="rounded-2xl bg-gradient-to-r from-emerald-500 via-lime-500 to-green-400 p-[1px]">
+                                <CardContent className="rounded-2xl bg-white/95 p-6 text-center shadow-inner dark:bg-slate-900/80">
+                                    <Badge variant="secondary" className="mb-3 bg-white/80 text-emerald-700 uppercase tracking-wide dark:bg-slate-900/50 dark:text-emerald-200">
+                                        {language === 'ja' ? '実験の説明' : 'Experiment Brief'}
+                                    </Badge>
+                                    <p className="text-xl font-bold text-slate-900 dark:text-white">
+                                        {language === 'ja'
+                                            ? 'この実験は、できる限り早く、そしてより正確にボタンを押す実験です。'
+                                            : 'Press the correct button as fast and as accurately as possible.'}
+                                    </p>
+                                    <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
+                                        {language === 'ja'
+                                            ? '色と文字の情報に惑わされないよう集中し、スピードと正確性を同時に追求しましょう。'
+                                            : 'Stay locked in despite conflicting cues and chase both speed and precision every trial.'}
+                                    </p>
+                                </CardContent>
+                            </div>
+
                             <div className="grid gap-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <h3 className="font-semibold flex items-center">
-                                        <Target className="mr-2 h-4 w-4" />
-                                        {language === 'ja' ? '実験構成' : 'Structure'}
-                                    </h3>
-                                    <ul className="text-sm space-y-1 text-muted-foreground">
-                                        <li>
-                                            {language === 'ja'
-                                                ? `• 総試行数: ${totalTrials}試行`
-                                                : `• Total trials: ${totalTrials}`}
-                                        </li>
-                                        <li>
-                                            {language === 'ja'
-                                                ? `• ブロック数: ${totalBlocks}ブロック`
-                                                : `• Blocks: ${totalBlocks}`}
-                                        </li>
-                                        <li>
-                                            {language === 'ja'
-                                                ? `• 各ブロック: ${trialsPerBlock}試行`
-                                                : `• Trials per block: ${trialsPerBlock}`}
-                                        </li>
-                                        <li>
-                                            {language === 'ja'
-                                                ? '• ブロック間にフィードバック表示'
-                                                : '• Feedback appears between blocks'}
-                                        </li>
-                                    </ul>
-                                </div>
 
                                 <div className="space-y-2">
                                     <h3 className="font-semibold flex items-center">
