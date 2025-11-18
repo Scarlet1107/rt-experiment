@@ -27,7 +27,10 @@ export async function GET() {
         const supabase = getAdminClient();
         const { data, error } = await supabase
             .from('participants')
-            .select('*, experiments(*, blocks(*))')
+            .select(`
+                *,
+                experiments(*, blocks(*))
+            `)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
