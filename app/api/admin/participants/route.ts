@@ -29,7 +29,7 @@ export async function GET() {
             .from('participants')
             .select(`
                 *,
-                experiments(*, blocks(*))
+                experiments(*, blocks(*, trials(*)))
             `)
             .order('created_at', { ascending: false });
 
@@ -55,7 +55,7 @@ export async function POST() {
         const { data, error } = await supabase
             .from('participants')
             .insert({ id: participantId, language: 'ja', admin_memo: null })
-            .select('*, experiments(*, blocks(*))')
+            .select('*, experiments(*, blocks(*, trials(*)))')
             .single();
 
         if (error) throw error;
