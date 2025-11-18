@@ -229,7 +229,6 @@ export async function saveParticipantToSupabase(participant: {
     motivationStyle: MotivationStyle;
     evaluationFocus: EvaluationFocus;
     language: string;
-    adminMemo?: string | null;
 }): Promise<boolean> {
     try {
         const participantRow = {
@@ -245,11 +244,10 @@ export async function saveParticipantToSupabase(participant: {
             motivation_style: participant.motivationStyle,
             evaluation_focus: participant.evaluationFocus,
             language: participant.language,
-            admin_memo: participant.adminMemo ?? null,
             static_completed_at: null,
             personalized_completed_at: null,
             updated_at: new Date().toISOString(),
-        } satisfies Omit<ParticipantRow, 'created_at' | 'updated_at'> & { updated_at?: string };
+        } satisfies Omit<ParticipantRow, 'created_at' | 'updated_at' | 'admin_memo'> & { updated_at?: string };
 
         const { error } = await supabase
             .from('participants')
