@@ -32,6 +32,20 @@ const {
 
 type ParticipantStatus = 'pending' | 'active' | 'abandoned' | 'completed';
 
+interface ApiTrial {
+    id: string;
+    trial_number: number;
+    word: string;
+    word_type: string;
+    ink_color: string;
+    is_congruent: boolean;
+    response_key: string | null;
+    chosen_answer: string | null;
+    is_correct: boolean | null;
+    reaction_time: number | null;
+    timestamp: string;
+}
+
 interface ApiBlock {
     id: string;
     block_number: number;
@@ -39,6 +53,7 @@ interface ApiBlock {
     average_rt: number | null;
     feedback_shown: string | null;
     completed_at: string | null;
+    trials?: ApiTrial[];
 }
 
 interface ApiExperiment {
@@ -419,6 +434,7 @@ function ExperimentGroupBadge({ experimentOrder }: { experimentOrder: 'static-fi
     const [rowMemoFeedback, setRowMemoFeedback] = useState<Record<string, string | null>>({});
     const [rowMemoLastSaved, setRowMemoLastSaved] = useState<Record<string, string>>({});
     const [copiedInviteKey, setCopiedInviteKey] = useState<string | null>(null);
+    const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set());
     const memoSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
 
     useEffect(() => {
@@ -599,6 +615,18 @@ function ExperimentGroupBadge({ experimentOrder }: { experimentOrder: 'static-fi
             window.prompt('招待URLをコピーしてください', url);
         }
     };
+
+    const toggleBlockExpansion = useCallback((blockId: string) => {
+        setExpandedBlocks(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(blockId)) {
+                newSet.delete(blockId);
+            } else {
+                newSet.add(blockId);
+            }
+            return newSet;
+        });
+    }, []);
 
     const recentInviteUrls = useMemo(() => {
         if (!recentParticipantId) return null;
@@ -993,19 +1021,109 @@ function ExperimentGroupBadge({ experimentOrder }: { experimentOrder: 'static-fi
                                                     <p className="mt-3 text-sm text-muted-foreground">フィードバックは記録されていません</p>
                                                 ) : (
                                                     <div className="mt-3 space-y-3">
-                                                        {exp.blocks.map(block => (
-                                                            <div key={block.id} className="rounded-lg border border-white bg-white p-3 shadow-sm">
-                                                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                    <div className="font-medium text-slate-900">ブロック {block.block_number}</div>
-                                                                    <div className="text-xs text-slate-500">
-                                                                        正答率 {block.accuracy ?? '-'}% / 平均RT {block.average_rt ?? '-'}ms
+                                                        {exp.blocks.map(block => {
+                                                            const isExpanded = expandedBlocks.has(block.id);
+                                                            const trialCount = block.trials?.length ?? 0;
+                                                            return (
+                                                                <div key={block.id} className="rounded-lg border border-white bg-white p-3 shadow-sm">
+                                                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                        <div className="font-medium text-slate-900">ブロック {block.block_number}</div>
+                                                                        <div className="text-xs text-slate-500">
+                                                                            正答率 {block.accuracy ?? '-'}% / 平均RT {block.average_rt ?? '-'}ms
+                                                                            {trialCount > 0 && (
+                                                                                <span className="ml-2">
+                                                                                    • 試行数: {trialCount}
+                                                                                    <Button
+                                                                                        variant="ghost"
+                                                                                        size="sm"
+                                                                                        className="ml-2 h-6 px-2 text-xs"
+                                                                                        onClick={() => toggleBlockExpansion(block.id)}
+                                                                                    >
+                                                                                        {isExpanded ? '▼ 試行を隠す' : '▶ 試行を表示'}
+                                                                                    </Button>
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
+                                                                    <p className="mt-2 whitespace-pre-line text-sm text-slate-700">
+                                                                        {block.feedback_shown || 'フィードバックは記録されていません'}
+                                                                    </p>
+
+                                                                    {/* Trial詳細表示 */}
+                                                                    {isExpanded && block.trials && block.trials.length > 0 && (
+                                                                        <div className="mt-4 border-t pt-3">
+                                                                            <h5 className="text-sm font-semibold mb-2">試行詳細</h5>
+                                                                            <div className="overflow-x-auto">
+                                                                                <Table className="text-xs">
+                                                                                    <TableHeader>
+                                                                                        <TableRow>
+                                                                                            <TableHead className="w-16">試行</TableHead>
+                                                                                            <TableHead>単語</TableHead>
+                                                                                            <TableHead>色</TableHead>
+                                                                                            <TableHead>一致</TableHead>
+                                                                                            <TableHead>回答</TableHead>
+                                                                                            <TableHead>正誤</TableHead>
+                                                                                            <TableHead>RT(ms)</TableHead>
+                                                                                        </TableRow>
+                                                                                    </TableHeader>
+                                                                                    <TableBody>
+                                                                                        {block.trials.map(trial => (
+                                                                                            <TableRow key={trial.id}>
+                                                                                                <TableCell>{trial.trial_number}</TableCell>
+                                                                                                <TableCell>{trial.word}</TableCell>
+                                                                                                <TableCell>
+                                                                                                    <span
+                                                                                                        className="px-2 py-1 rounded text-white text-xs"
+                                                                                                        style={{
+                                                                                                            backgroundColor: trial.ink_color === 'RED' ? '#dc2626' :
+                                                                                                                trial.ink_color === 'GREEN' ? '#16a34a' :
+                                                                                                                    trial.ink_color === 'BLUE' ? '#2563eb' : '#64748b'
+                                                                                                        }}
+                                                                                                    >
+                                                                                                        {trial.ink_color}
+                                                                                                    </span>
+                                                                                                </TableCell>
+                                                                                                <TableCell>
+                                                                                                    <Badge variant={trial.is_congruent ? 'default' : 'secondary'} className="text-xs">
+                                                                                                        {trial.is_congruent ? '一致' : '不一致'}
+                                                                                                    </Badge>
+                                                                                                </TableCell>
+                                                                                                <TableCell>{trial.chosen_answer || '-'}</TableCell>
+                                                                                                <TableCell>
+                                                                                                    {trial.is_correct === null ? (
+                                                                                                        <Badge variant="outline" className="text-xs">timeout</Badge>
+                                                                                                    ) : trial.is_correct ? (
+                                                                                                        <Badge variant="default" className="text-xs bg-green-600">○</Badge>
+                                                                                                    ) : (
+                                                                                                        <Badge variant="destructive" className="text-xs">×</Badge>
+                                                                                                    )}
+                                                                                                </TableCell>
+                                                                                                <TableCell>
+                                                                                                    {trial.reaction_time ? (
+                                                                                                        <span className={cn(
+                                                                                                            trial.reaction_time > 10000 ? 'text-red-600 font-semibold' :
+                                                                                                                trial.reaction_time < 50 ? 'text-orange-600 font-semibold' :
+                                                                                                                    'text-foreground'
+                                                                                                        )}>
+                                                                                                            {Math.round(trial.reaction_time)}
+                                                                                                        </span>
+                                                                                                    ) : '-'}
+                                                                                                </TableCell>
+                                                                                            </TableRow>
+                                                                                        ))}
+                                                                                    </TableBody>
+                                                                                </Table>
+                                                                            </div>
+                                                                            <div className="mt-2 text-xs text-muted-foreground">
+                                                                                <span className="text-red-600">■ 10秒超過</span>
+                                                                                <span className="ml-4 text-orange-600">■ 50ms未満</span>
+                                                                                <span className="ml-4">の反応時間は異常値の可能性があります</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
-                                                                <p className="mt-2 whitespace-pre-line text-sm text-slate-700">
-                                                                    {block.feedback_shown || 'フィードバックは記録されていません'}
-                                                                </p>
-                                                            </div>
-                                                        ))}
+                                                            );
+                                                        })}
                                                     </div>
                                                 )}
                                             </div>

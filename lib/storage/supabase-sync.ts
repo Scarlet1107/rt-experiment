@@ -127,10 +127,31 @@ export async function syncExperimentToSupabase(experimentId: string): Promise<bo
             for (const [trialIndex, trial] of block.trials.entries()) {
                 console.log(`試行 ${trialIndex + 1}/${block.trials.length} 処理開始 (ID: ${trial.id})`);
 
-                const normalizedReactionTime =
-                    typeof trial.reactionTime === 'number' && !Number.isNaN(trial.reactionTime)
-                        ? Math.round(trial.reactionTime)
-                        : undefined;
+                // RT妥当性チェック
+                let normalizedReactionTime: number | undefined;
+                if (typeof trial.reactionTime === 'number' && !Number.isNaN(trial.reactionTime)) {
+                    if (trial.reactionTime >= Number(process.env.NEXT_PUBLIC_TRIAL_TIME_LIMIT_MS)) {
+                        console.warn(`⚠️ 異常RT検出 - 保存時に除外:`, {
+                            trialId: trial.id,
+                            reactionTime: trial.reactionTime,
+                            blockId: trial.blockId,
+                            isCorrect: trial.isCorrect
+                        });
+                        normalizedReactionTime = undefined; // 異常値は保存しない
+                    } else if (trial.reactionTime < 50) { // 50ms未満は異常に早い
+                        console.warn(`⚠️ 異常に早いRT検出:`, {
+                            trialId: trial.id,
+                            reactionTime: trial.reactionTime,
+                            blockId: trial.blockId,
+                            isCorrect: trial.isCorrect
+                        });
+                        normalizedReactionTime = Math.round(trial.reactionTime); // 早すぎるが一応保存
+                    } else {
+                        normalizedReactionTime = Math.round(trial.reactionTime);
+                    }
+                } else {
+                    normalizedReactionTime = undefined;
+                }
 
                 const trialRow: Omit<TrialRow, 'created_at'> = {
                     id: uuidv5(`${trial.blockId}-trial-${trial.id}`, TRIAL_UUID_NAMESPACE),
