@@ -69,6 +69,8 @@ interface ApiParticipant {
     created_at: string;
     updated_at: string;
     admin_memo: string | null;
+    static_completed_at: string | null;
+    personalized_completed_at: string | null;
     experiments: ApiExperiment[];
 }
 
@@ -102,6 +104,7 @@ interface ParticipantSummary {
         static: boolean;
         personalized: boolean;
     };
+    experimentOrder: 'static-first' | 'personalized-first' | 'static-only' | 'personalized-only' | 'in-progress' | null;
     adminMemo: string | null;
 }
 
@@ -170,6 +173,26 @@ function transformParticipant(participant: ApiParticipant): ParticipantSummary {
         status = hoursSinceUpdate > 24 ? 'abandoned' : 'active';
     }
 
+    // 実験順序を判定
+    let experimentOrder: 'static-first' | 'personalized-first' | 'static-only' | 'personalized-only' | 'in-progress' | null = null;
+    const staticCompletedAt = participant.static_completed_at ? new Date(participant.static_completed_at) : null;
+    const personalizedCompletedAt = participant.personalized_completed_at ? new Date(participant.personalized_completed_at) : null;
+
+    if (staticCompletedAt && personalizedCompletedAt) {
+        // 両方完了している場合、先に完了した方を判定
+        experimentOrder = staticCompletedAt < personalizedCompletedAt ? 'static-first' : 'personalized-first';
+    } else if (staticCompletedAt && !personalizedCompletedAt) {
+        // Staticのみ完了
+        experimentOrder = 'static-only';
+    } else if (personalizedCompletedAt && !staticCompletedAt) {
+        // Personalizedのみ完了
+        experimentOrder = 'personalized-only';
+    } else if (hasProgress) {
+        // どちらも完了していないが進行中
+        experimentOrder = 'in-progress';
+    }
+    // どちらも完了していない、かつ進行もしていない場合はnull
+
     return {
         id: participant.id,
         nickname: participant.nickname,
@@ -190,6 +213,7 @@ function transformParticipant(participant: ApiParticipant): ParticipantSummary {
             static: hasStaticCompleted,
             personalized: hasPersonalizedCompleted,
         },
+        experimentOrder,
         adminMemo: participant.admin_memo ?? null,
     };
 }
@@ -317,7 +341,64 @@ function ConditionStatusPill({ label, done }: { label: string; done: boolean }) 
     );
 }
 
-export default function AdminDashboard() {
+function ExperimentGroupBadge({ experimentOrder }: { experimentOrder: 'static-first' | 'personalized-first' | 'static-only' | 'personalized-only' | 'in-progress' | null }) {
+    if (experimentOrder === 'static-first') {
+        return (
+            <div className="flex items-center gap-1 text-xs">
+                <Badge variant="secondary" className="text-[10px]">
+                    Static → Personalized
+                </Badge>
+            </div>
+        );
+    }
+
+    if (experimentOrder === 'personalized-first') {
+        return (
+            <div className="flex items-center gap-1 text-xs">
+                <Badge variant="default" className="text-[10px]">
+                    Personalized → Static
+                </Badge>
+            </div>
+        );
+    }
+
+    if (experimentOrder === 'static-only') {
+        return (
+            <div className="flex items-center gap-1 text-xs">
+                <Badge variant="outline" className="text-[10px] border-blue-200 bg-blue-50 text-blue-700">
+                    Static完了
+                </Badge>
+                <span className="text-xs text-muted-foreground">→ Personalized待ち</span>
+            </div>
+        );
+    }
+
+    if (experimentOrder === 'personalized-only') {
+        return (
+            <div className="flex items-center gap-1 text-xs">
+                <Badge variant="outline" className="text-[10px] border-green-200 bg-green-50 text-green-700">
+                    Personalized完了
+                </Badge>
+                <span className="text-xs text-muted-foreground">→ Static待ち</span>
+            </div>
+        );
+    }
+
+    if (experimentOrder === 'in-progress') {
+        return (
+            <div className="flex items-center gap-1 text-xs">
+                <Clock className="h-3 w-3 text-amber-600" />
+                <span className="text-amber-600 font-medium">実験中</span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex items-center gap-1 text-xs">
+            <span className="text-muted-foreground">未開始</span>
+        </div>
+    );
+} export default function AdminDashboard() {
     const [participants, setParticipants] = useState<ParticipantSummary[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -688,7 +769,7 @@ export default function AdminDashboard() {
                                             <TableHead>メモ</TableHead>
                                             <TableHead>進行状況</TableHead>
                                             <TableHead>招待リンク</TableHead>
-                                            <TableHead>最終更新</TableHead>
+                                            <TableHead>実験グループ</TableHead>
                                             <TableHead className="text-right min-w-[160px]">操作</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -767,9 +848,8 @@ export default function AdminDashboard() {
                                                             );
                                                         })}
                                                     </TableCell>
-                                                    <TableCell className="text-sm text-muted-foreground">
-                                                        {participant.lastUpdate.toLocaleDateString('ja-JP')}<br />
-                                                        {participant.lastUpdate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                                                    <TableCell>
+                                                        <ExperimentGroupBadge experimentOrder={participant.experimentOrder} />
                                                     </TableCell>
                                                     <TableCell className="text-right space-x-2">
                                                         <Button
