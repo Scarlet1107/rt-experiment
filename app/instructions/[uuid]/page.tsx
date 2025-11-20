@@ -19,15 +19,15 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
     const copy = language === 'ja'
         ? {
             heroTitle: 'Stroop実験とは？',
-            heroIntro: '色を識別する力と注意の切り替えを測る、認知心理学の代表的な課題です。',
+            heroIntro: '色の意味と実際の色が異なるときに注意力が落ちることを確認する、認知心理学の代表的な課題です。',
             heroDetails: [
                 '画面に表示される単語の「意味」ではなく、文字の色だけを素早く判定し、対応するキーを入力します。',
-                'ニンテンドー3DSなどで遊んだ脳トレを思い出す方もいるかもしれませんが、今回は研究目的の正式な計測です。',
+                'ニンテンドー3DSなどの脳トレで似た形式を経験したことがあるかもしれません。大まかに同じ実験です。',
                 'なるべく正確に、そして可能な限り速く回答できるよう意識してください。'
             ],
             spotlight: {
-                title: '色に集中して答える実験です',
-                description: '原則として文字の意味よりも色に注意し、見えている色のキーを素早く押してください。無意味語だけは特例で「OTHER」を選ぶルールです。'
+                title: 'この実験は色に集中して答える実験です',
+                description: '原則として文字の意味よりも色に注意し、見えている色のキーを素早く押してください。無意味語だけは特例で「その他」を選ぶルールです。'
             },
             examplesTitle: '例題でルールを確認',
             placeholderLabel: 'ここにスクリーンショットを配置'
@@ -206,6 +206,30 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                     </div>
                 </section>
 
+                <section className="grid gap-8 lg:grid-cols-[1.1fr,0.9fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div className="mb-5 flex items-center justify-between">
+                            <h3 className="text-xl font-semibold text-slate-900">{t.instructions.keyMapping.title}</h3>
+                            <span className="text-xs uppercase tracking-widest text-slate-400">A / S / K / L</span>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            {colorMapping.map(({ key, label, bg, text }) => (
+                                <div key={key} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/70 p-4 sm:flex-col sm:items-start sm:gap-4 lg:flex-row">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-bold ${bg} ${text}`}>
+                                            {key}
+                                        </div>
+                                        <div className="text-base font-semibold text-slate-900">{label}</div>
+                                    </div>
+                                    <span className="text-xs font-medium text-slate-400">KEY {key}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+
+                </section>
+
                 <section className="space-y-5">
                     <div className="flex items-center gap-3">
                         <span className="rounded-full bg-indigo-600/10 px-4 py-1 text-xs font-semibold uppercase tracking-widest text-indigo-700">
@@ -237,28 +261,6 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                             </div>
                         ))}
                     </div>
-                </section>
-
-                <section className="grid gap-8 lg:grid-cols-[1.1fr,0.9fr]">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                        <div className="mb-5 flex items-center justify-between">
-                            <h3 className="text-xl font-semibold text-slate-900">{t.instructions.keyMapping.title}</h3>
-                            <span className="text-xs uppercase tracking-widest text-slate-400">A / S / K / L</span>
-                        </div>
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                            {colorMapping.map(({ key, label, bg, text }) => (
-                                <div key={key} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/70 p-4 sm:flex-col sm:items-start sm:gap-4 lg:flex-row">
-                                    <div className="flex items-center gap-4">
-                                        <div className={`flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-bold ${bg} ${text}`}>
-                                            {key}
-                                        </div>
-                                        <div className="text-base font-semibold text-slate-900">{label}</div>
-                                    </div>
-                                    <span className="text-xs font-medium text-slate-400">KEY {key}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
 
                     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                         <h3 className="text-xl font-semibold text-slate-900">{experimentFlowCopy.title}</h3>
@@ -278,6 +280,7 @@ function InstructionsContent({ uuid }: InstructionsContentProps) {
                         </div>
                     </div>
                 </section>
+
 
                 <section className="flex flex-col items-center gap-4 text-center">
                     <button
