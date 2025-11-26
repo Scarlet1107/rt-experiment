@@ -21,7 +21,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye, BarChart3, Check, Beaker } from 'lucide-react';
+import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye, BarChart3, Check, Beaker, Download } from 'lucide-react';
 import type { TonePreference, MotivationStyle, EvaluationFocus } from '@/types';
 import { experimentConfig } from '@/lib/config/experiment';
 
@@ -435,6 +435,9 @@ function ExperimentGroupBadge({ experimentOrder }: { experimentOrder: 'static-fi
     const [rowMemoLastSaved, setRowMemoLastSaved] = useState<Record<string, string>>({});
     const [copiedInviteKey, setCopiedInviteKey] = useState<string | null>(null);
     const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set());
+    const [exportingBackup, setExportingBackup] = useState(false);
+    const [backupError, setBackupError] = useState<string | null>(null);
+    const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
     const memoSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
 
     useEffect(() => {
@@ -528,6 +531,35 @@ function ExperimentGroupBadge({ experimentOrder }: { experimentOrder: 'static-fi
             setError(err instanceof Error ? err.message : '参加者の追加に失敗しました');
         } finally {
             setCreating(false);
+        }
+    };
+
+    const handleDownloadBackup = async () => {
+        try {
+            setExportingBackup(true);
+            setBackupError(null);
+            const response = await fetch('/api/admin/backup', { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error('バックアップの生成に失敗しました');
+            }
+            const blob = await response.blob();
+            const suggestedName = response.headers.get('X-Backup-Filename');
+            const fallbackName = `supabase-backup-${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}.xlsx`;
+            const fileName = suggestedName || fallbackName;
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = fileName;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            URL.revokeObjectURL(url);
+            setLastBackupAt(new Date().toLocaleString('ja-JP'));
+        } catch (err) {
+            console.error('バックアップのダウンロードに失敗しました:', err);
+            setBackupError(err instanceof Error ? err.message : 'バックアップのダウンロードに失敗しました');
+        } finally {
+            setExportingBackup(false);
         }
     };
 
@@ -689,6 +721,38 @@ function ExperimentGroupBadge({ experimentOrder }: { experimentOrder: 'static-fi
                         </Button>
                     </div>
                 </div>
+
+                <Card>
+                    <CardHeader className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                            <CardTitle>Supabaseバックアップ</CardTitle>
+                            <CardDescription>全テーブルをシート分けしたExcelファイル（.xlsx）でダウンロードします（読み取り専用）。</CardDescription>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={handleDownloadBackup}
+                                disabled={exportingBackup}
+                            >
+                                <Download className="mr-2 h-4 w-4" />
+                                {exportingBackup ? 'エクスポート中...' : 'バックアップをダウンロード'}
+                            </Button>
+                            {lastBackupAt && (
+                                <span className="text-xs text-muted-foreground">前回: {lastBackupAt}</span>
+                            )}
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm text-muted-foreground">
+                        <p>Supabaseの1リクエスト上限（1000件）を考慮し、trialsなどの大量データはページングで全件取得します。</p>
+                        <p>取得のみを行い、書き込みや削除は一切行いません。Excel内で各テーブルが別シートになります。</p>
+                        {backupError && (
+                            <Alert variant="destructive">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertDescription>{backupError}</AlertDescription>
+                            </Alert>
+                        )}
+                    </CardContent>
+                </Card>
 
                 {error && (
                     <Alert variant="destructive">

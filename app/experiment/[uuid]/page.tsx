@@ -366,7 +366,7 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                     return;
                 }
 
-                setStartStatusMessage(language === 'ja' ? '追加の初期設定を行っています…' : 'Finalizing setup…');
+                setStartStatusMessage(language === 'ja' ? '準備中...約10秒後に実験が始まります' : 'Preparing... the experiment will start in about 10 seconds');
                 if (!feedbackPatterns) {
                     const patterns = await getOrGenerateFeedbackPatterns(info);
                     setFeedbackPatterns(patterns);
@@ -1023,11 +1023,6 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                             <CardTitle className="text-3xl">
                                 {language === 'ja' ? '本番実験の開始' : 'Begin Main Experiment'}
                             </CardTitle>
-                            <CardDescription className="text-lg">
-                                {language === 'ja'
-                                    ? `これから${totalBlocks}ブロック（${totalTrials}試行）の本番実験を行います`
-                                    : `You will now complete ${totalBlocks} blocks (${totalTrials} trials) in the main task.`}
-                            </CardDescription>
                         </CardHeader>
 
                         <CardContent className="space-y-6">
