@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createServerClient, SupabaseClient } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
+import { SupabaseClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 
 const MAX_PAGE_SIZE = 1000;
