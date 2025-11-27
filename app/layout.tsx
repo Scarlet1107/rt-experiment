@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Shogo RT Experiment App",
-  description: "卒論のための反応時間実験アプリ",
+  description: "卒論のための反応時間実験アプリ。PCからアクセスしてください。Please access from a computer.",
 };
 
 export default function RootLayout({
