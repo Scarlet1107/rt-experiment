@@ -245,6 +245,10 @@ function PracticeContent({ uuid }: PracticeContentProps) {
         router.push(`/experiment/${uuid}?condition=${condition}`);
     };
 
+    const handleReturnToInstructions = () => {
+        router.push(`/instructions/${uuid}?condition=${condition}`);
+    };
+
     useEffect(() => {
         if (state !== 'intro') return;
 
@@ -383,7 +387,7 @@ function PracticeContent({ uuid }: PracticeContentProps) {
                         </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <div className="flex flex-col sm:flex-row flex-wrap gap-4 justify-center">
                         <button
                             onClick={handleContinuePractice}
                             className="px-6 py-3 text-base font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-full hover:bg-gray-50 hover:border-gray-400 transition-colors"
@@ -397,6 +401,13 @@ function PracticeContent({ uuid }: PracticeContentProps) {
                             className="px-6 py-3 text-base font-semibold text-white bg-blue-600 border-2 border-blue-600 rounded-full transition-colors disabled:cursor-not-allowed disabled:bg-blue-300 disabled:border-blue-300 hover:bg-blue-700 hover:border-blue-700 disabled:hover:bg-blue-300 disabled:hover:border-blue-300"
                         >
                             {t.practice.continueToMain}
+                        </button>
+
+                        <button
+                            onClick={handleReturnToInstructions}
+                            className="px-6 py-3 text-base font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-full hover:bg-gray-50 hover:border-gray-400 transition-colors"
+                        >
+                            {t.practice.backToInstructions}
                         </button>
                     </div>
 

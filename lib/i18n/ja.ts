@@ -65,7 +65,8 @@ export const ja = {
         correct: "正解",
         incorrect: "不正解",
         continueToMain: "本番を開始",
-        continePractice: "練習を続ける"
+        continePractice: "練習を続ける",
+        backToInstructions: "ルール説明に戻る"
     },
 
     experiment: {
