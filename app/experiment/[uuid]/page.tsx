@@ -1238,12 +1238,12 @@ function ExperimentContent({ uuid }: ExperimentContentProps) {
                                 </div>
                                 <div className="space-y-2">
                                     {(parsedBlockFeedback.heading || blockFeedback) && (
-                                        <p className="text-2xl font-semibold leading-snug">
+                                        <p className="text-3xl font-semibold leading-snug">
                                             {parsedBlockFeedback.heading || blockFeedback}
                                         </p>
                                     )}
                                     {parsedBlockFeedback.notes.map((line, index) => (
-                                        <p key={index} className="text-lg text-muted-foreground">
+                                        <p key={index} className="text-xl text-muted-foreground">
                                             {line}
                                         </p>
                                     ))}

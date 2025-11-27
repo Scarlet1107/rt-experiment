@@ -67,7 +67,8 @@ Press the corresponding key for the displayed text color as quickly and accurate
         correct: "Right",
         incorrect: "Wrong",
         continueToMain: "Start Main Experiment",
-        continePractice: "Continue Practice"
+        continePractice: "Continue Practice",
+        backToInstructions: "Back to Instructions"
     },
 
     experiment: {
