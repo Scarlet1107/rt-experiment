@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, use } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LanguageProvider, useLanguage, Language } from '../../../lib/i18n';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Languages, ArrowRight } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Languages, ArrowRight, AlertCircle } from 'lucide-react';
 import ReactCountryFlag from "react-country-flag";
 
 interface LanguageSelectorContentProps {
@@ -19,6 +20,7 @@ function LanguageSelectorContent({ uuid }: LanguageSelectorContentProps) {
     const searchParams = useSearchParams();
     const condition = (searchParams.get('condition') as 'static' | 'personalized') || 'static';
     const [isLoading, setIsLoading] = useState(false);
+    const [isSmallViewport, setIsSmallViewport] = useState(false);
 
     const handleLanguageSelect = async (selectedLanguage: Language) => {
         setIsLoading(true);
@@ -30,9 +32,43 @@ function LanguageSelectorContent({ uuid }: LanguageSelectorContentProps) {
         }, 300);
     };
 
+    useEffect(() => {
+        const detectViewport = () => {
+            if (typeof window === 'undefined') return;
+            setIsSmallViewport(window.innerWidth < 1024);
+        };
+
+        detectViewport();
+        window.addEventListener('resize', detectViewport);
+        return () => window.removeEventListener('resize', detectViewport);
+    }, []);
+
     return (
         <main className="min-h-screen bg-background flex items-center justify-center px-6 py-12">
             <div className="w-full max-w-2xl">
+                {isSmallViewport && (
+                    <Alert className="mb-6 bg-amber-50 border-amber-200 text-amber-900">
+                        <AlertCircle className="h-4 w-4 text-amber-600" />
+                        <AlertTitle>
+                            <span className="block">この実験はPCでの参加を想定しています</span>
+                            <span className="block">This experiment is designed for desktop use</span>
+                        </AlertTitle>
+                        <AlertDescription className="space-y-1">
+                            <p>
+                                スマートフォンやタブレットでアクセスしている場合は、PCから参加してください。
+                            </p>
+                            <p>
+                                PCの場合はブラウザの幅を大きくしてから開始してください。
+                            </p>
+                            <p>
+                                If you are on a phone or tablet, please switch to a desktop or laptop.
+                            </p>
+                            <p>
+                                If you are on a PC, enlarge your browser window before you begin.
+                            </p>
+                        </AlertDescription>
+                    </Alert>
+                )}
                 <Card>
                     <CardHeader className="text-center space-y-4">
                         <div className="flex justify-center">
