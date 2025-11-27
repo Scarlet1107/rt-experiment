@@ -52,6 +52,19 @@ const fetchAllRows = async (supabase: SupabaseClient, table: string, orderBy?: {
     return records;
 };
 
+const normalizeCellValue = (value: unknown) => {
+    if (value === null || value === undefined) return value;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object') {
+        try {
+            return JSON.stringify(value);
+        } catch {
+            return String(value);
+        }
+    }
+    return value;
+};
+
 export async function GET() {
     try {
         const supabase = getAdminClient();
@@ -68,7 +81,11 @@ export async function GET() {
         const workbook = XLSX.utils.book_new();
         for (const config of tableConfigs) {
             const rows = await fetchAllRows(supabase, config.table, config.orderBy);
-            const sheetData = rows.length > 0 ? rows : [{ note: 'データがありません' }];
+            const sheetData = rows.length > 0
+                ? rows.map((row) => Object.fromEntries(
+                    Object.entries(row).map(([key, value]) => [key, normalizeCellValue(value)]),
+                ))
+                : [{ note: 'データがありません' }];
             const worksheet = XLSX.utils.json_to_sheet(sheetData);
             XLSX.utils.book_append_sheet(workbook, worksheet, config.table);
         }
