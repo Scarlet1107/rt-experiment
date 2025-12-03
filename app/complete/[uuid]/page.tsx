@@ -293,10 +293,13 @@ function CompleteContent({ uuid }: CompleteContentProps) {
                             {language === 'ja'
                                 ? 'お疲れ様でした。実験データが正常に保存されました。'
                                 : 'Great work. Your data has been saved successfully.'}
+                            <br />
+                            {language === 'ja'
+                                ? 'ダウンロードされたバックアップはどこかしらへ１週間ほど保存をお願いします。'
+                                : 'Please keep the downloaded backup for about a week.'}
                         </CardDescription>
                     </CardHeader>
                 </Card>
-
                 {loadError && (
                     <Card>
                         <CardContent className="text-center text-sm text-destructive">
