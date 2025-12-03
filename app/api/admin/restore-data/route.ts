@@ -104,6 +104,56 @@ export async function POST(request: NextRequest) {
                     { status: 400 }
                 );
             }
+
+            // 既存のブロック ID を取得
+            const { data: existingBlocks, error: fetchBlocksError } = await supabase
+                .from('blocks')
+                .select('id')
+                .eq('experiment_id', experimentId);
+
+            if (fetchBlocksError) {
+                console.error('既存ブロック取得エラー:', fetchBlocksError);
+                return NextResponse.json(
+                    { message: '既存ブロックデータの確認に失敗しました' },
+                    { status: 500 }
+                );
+            }
+
+            if (existingBlocks && existingBlocks.length > 0) {
+                const existingBlockIds = existingBlocks.map(b => b.id);
+
+                // 既存の試行データを削除
+                const { error: deleteTrialsError } = await supabase
+                    .from('trials')
+                    .delete()
+                    .in('block_id', existingBlockIds);
+
+                if (deleteTrialsError) {
+                    console.error('既存試行削除エラー:', deleteTrialsError);
+                    return NextResponse.json(
+                        { message: '既存試行データの削除に失敗しました' },
+                        { status: 500 }
+                    );
+                }
+
+                console.log('✅ 既存試行データ削除完了:', existingBlockIds.length, 'ブロックの試行を削除');
+
+                // 既存のブロックデータを削除
+                const { error: deleteBlocksError } = await supabase
+                    .from('blocks')
+                    .delete()
+                    .eq('experiment_id', experimentId);
+
+                if (deleteBlocksError) {
+                    console.error('既存ブロック削除エラー:', deleteBlocksError);
+                    return NextResponse.json(
+                        { message: '既存ブロックデータの削除に失敗しました' },
+                        { status: 500 }
+                    );
+                }
+
+                console.log('✅ 既存ブロックデータ削除完了:', existingBlockIds.length, '件');
+            }
         }
 
         // ブロックデータを Supabase に保存
@@ -123,7 +173,7 @@ export async function POST(request: NextRequest) {
 
         const { error: blockError } = await supabase
             .from('blocks')
-            .upsert(blockUpsertData);
+            .insert(blockUpsertData);
 
         if (blockError) {
             console.error('ブロック保存エラー:', blockError);
@@ -171,7 +221,7 @@ export async function POST(request: NextRequest) {
 
                 const { error: trialError } = await supabase
                     .from('trials')
-                    .upsert(batch);
+                    .insert(batch);
 
                 if (trialError) {
                     console.error('試行保存エラー:', trialError);
