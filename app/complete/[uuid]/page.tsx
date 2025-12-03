@@ -11,6 +11,69 @@ import { CheckCircle, Download, Clock, Target, AlertCircle } from 'lucide-react'
 import { experimentConfig } from '@/lib/config/experiment';
 import type { Experiment } from '@/types';
 
+/**
+ * IndexedDB からすべてのデータを取得
+ */
+async function getIndexedDBData(): Promise<{ experiments: any[]; participants: any[] }> {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('rt-experiment-db');
+
+        request.onerror = () => {
+            reject(new Error('IndexedDB を開くことができません'));
+        };
+
+        request.onsuccess = (event) => {
+            const db = (event.target as IDBOpenDBRequest).result;
+
+            try {
+                const tx = db.transaction(['experiments', 'participants'], 'readonly');
+
+                const experimentsStore = tx.objectStore('experiments');
+                const participantsStore = tx.objectStore('participants');
+
+                const experimentsRequest = experimentsStore.getAll();
+                const participantsRequest = participantsStore.getAll();
+
+                let experimentResults: any[] = [];
+                let participantResults: any[] = [];
+                let completed = 0;
+
+                experimentsRequest.onsuccess = () => {
+                    experimentResults = experimentsRequest.result;
+                    completed++;
+                    if (completed === 2) {
+                        resolve({
+                            experiments: experimentResults,
+                            participants: participantResults,
+                        });
+                    }
+                };
+
+                participantsRequest.onsuccess = () => {
+                    participantResults = participantsRequest.result;
+                    completed++;
+                    if (completed === 2) {
+                        resolve({
+                            experiments: experimentResults,
+                            participants: participantResults,
+                        });
+                    }
+                };
+
+                experimentsRequest.onerror = () => {
+                    reject(new Error('experiments テーブルの読み込みに失敗しました'));
+                };
+
+                participantsRequest.onerror = () => {
+                    reject(new Error('participants テーブルの読み込みに失敗しました'));
+                };
+            } catch (error) {
+                reject(error);
+            }
+        };
+    });
+}
+
 interface CompleteContentProps {
     uuid: string;
 }
@@ -35,6 +98,7 @@ function CompleteContent({ uuid }: CompleteContentProps) {
         static: false,
         personalized: false
     });
+    const [backupDownloadStarted, setBackupDownloadStarted] = useState(false);
 
     useEffect(() => {
         const experimentId = `${uuid}-${condition}`;
@@ -106,6 +170,43 @@ function CompleteContent({ uuid }: CompleteContentProps) {
             aborted = true;
         };
     }, [uuid]);
+
+    // 実験完了ページ読み込み時に IndexedDB のバックアップを自動ダウンロード
+    useEffect(() => {
+        if (backupDownloadStarted || typeof window === 'undefined') return;
+
+        const downloadBackup = async () => {
+            try {
+                setBackupDownloadStarted(true);
+                const idbData = await getIndexedDBData();
+
+                const timestamp = new Date().toISOString()
+                    .replace(/[:.]/g, '')
+                    .slice(0, -5); // YYYYMMDDTHHMMSS 形式
+
+                const jsonString = JSON.stringify(idbData, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = `RT実験データバックアップ_${timestamp}.json`;
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+                URL.revokeObjectURL(url);
+
+                console.log('IndexedDB backup downloaded successfully');
+            } catch (error) {
+                console.warn('Failed to download IndexedDB backup:', error);
+                // バックアップダウンロード失敗は警告のみで、実験完了画面は表示する
+            }
+        };
+
+        // ページが完全に読み込まれた後にダウンロード開始
+        if (!isLoading) {
+            downloadBackup();
+        }
+    }, [isLoading, backupDownloadStarted]);
 
     const displayExperimentData = experimentData ?? pendingExperimentData;
 

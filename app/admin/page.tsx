@@ -21,7 +21,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye, BarChart3, Check, Beaker, Download } from 'lucide-react';
+import { AlertCircle, RefreshCw, Home, Users, UserCheck, UserX, Clock, Copy, Link2, Plus, Trash2, Eye, BarChart3, Check, Beaker, Download, RefreshCwOff } from 'lucide-react';
 import type { TonePreference, MotivationStyle, EvaluationFocus } from '@/types';
 import { experimentConfig } from '@/lib/config/experiment';
 
@@ -713,6 +713,12 @@ function ExperimentGroupBadge({ experimentOrder }: { experimentOrder: 'static-fi
                             <Link href="/admin/results">
                                 <BarChart3 className="mr-2 h-4 w-4" />
                                 成果分析ビュー
+                            </Link>
+                        </Button>
+                        <Button variant="outline" asChild>
+                            <Link href="/admin/data-restore">
+                                <RefreshCwOff className="mr-2 h-4 w-4" />
+                                データ復元
                             </Link>
                         </Button>
                         <Button onClick={handleCreateParticipant} disabled={creating}>
